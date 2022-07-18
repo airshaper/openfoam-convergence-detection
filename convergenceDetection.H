@@ -177,6 +177,8 @@ namespace Foam
             scalar convergenceMinIter_;
             scalar averagingMinIter_;
             bool convergenceFound_;
+            bool simulationFinished_;
+            int currentIteration_;
             int averagingStartedAt_;
             scalar normalizedForcesMeanConverged_;
             std::vector<double>

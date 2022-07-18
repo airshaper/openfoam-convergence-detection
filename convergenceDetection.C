@@ -177,6 +177,8 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
       convergenceMinIter_(dict.getOrDefault<scalar>("convergenceMinIter", 200)),
       averagingMinIter_(dict.getOrDefault<scalar>("averagingMinIter", 200)),
       convergenceFound_(false),
+      simulationFinished_(false),
+      currentIteration_(0),
       averagingStartedAt_(0),
       normalizedForcesMeanConverged_(0),
       forces_data_(0),
@@ -217,26 +219,40 @@ bool Foam::functionObjects::convergenceDetection::execute()
 
     forces_data_.push_back(totalForce);
 
+    currentIteration_ = mesh_.time().value();
+
     // need few iterations before starting calculation
-    if (mesh_.time().timeToUserTime(mesh_.time().value()) >= 5)
+    if (currentIteration_ >= 5)
     {
         double caclculatedPolynomGrad = calculatePolynomGrad();
 
         polyVector_.push_back(caclculatedPolynomGrad);
 
-        if (checkCriteriaForConvergence() < conditionConvergence_ && forces_data_.size() > convergenceMinIter_ && !convergenceFound_)
+        if (checkCriteriaForConvergence() < conditionConvergence_ && currentIteration_ > convergenceMinIter_ && !convergenceFound_)
         {
             convergenceFound_ = true;
             Info << "###########" << endl;
             Info << "Convergence Found" << endl;
             Info << "###########" << endl;
 
-            averagingStartedAt_ = forces_data_.size();
+            averagingStartedAt_ = currentIteration_;
 
             turnOnAveraging();
         }
 
-        int normalizationForcesWindow = static_cast<int>(forces_data_.size() * windowNormalization_);
+        if (currentIteration_ > maxStepConvergence_ && !convergenceFound_)
+        {
+            convergenceFound_ = true;
+            Info << "###########" << endl;
+            Info << "Forced Convergence Found" << endl;
+            Info << "###########" << endl;
+
+            averagingStartedAt_ = currentIteration_;
+
+            turnOnAveraging();
+        }
+
+        int normalizationForcesWindow = static_cast<int>(currentIteration_ * windowNormalization_);
 
         std::vector<double> normalizedForces(forces_data_.end() - normalizationForcesWindow, forces_data_.end());
 
@@ -244,7 +260,6 @@ bool Foam::functionObjects::convergenceDetection::execute()
 
         if (normalizedForcesMeanConverged_ > 0 && convergenceFound_)
         {
-
             double test1 = normalizedForcesMeanConverged_ / forceStabilityFactor_;
             double test2 = normalizedForcesMeanConverged_ * forceStabilityFactor_;
             double lastIterationForces = forces_data_.back();
@@ -255,20 +270,30 @@ bool Foam::functionObjects::convergenceDetection::execute()
                     << "Forces Exploded, mean force converged" << lastIterationForces << nl
                     << abort(FatalError);
             }
+        }
 
+        if (!simulationFinished_ && convergenceFound_)
+        {
             double caclculatedPolynomGradAveraging = calculatePolynomGradAveraging();
 
             polyVectorAveraging_.push_back(caclculatedPolynomGradAveraging);
-        }
 
-        if (convergenceFound_)
-        {
-            Info << "checkCriteriaForAveraging" << endl;
-            if (checkCriteriaForAveraging() < conditionAveraging_ && checkCriteriaForAveraging() > 0.0 and forces_data_.size() > static_cast<int>(1.25 * averagingStartedAt_))
+            Info << "checkCriteriaForAveraging(): " << checkCriteriaForAveraging() << " conditionAveraging_: " << conditionAveraging_ << endl;
+
+            if (checkCriteriaForAveraging() < conditionAveraging_ && checkCriteriaForAveraging() > 0.0 and currentIteration_ > static_cast<int>(1.25 * averagingStartedAt_) && !simulationFinished_)
             {
-                Info << "###########" << endl;
-                Info << "Simulation should stop!!!!" << endl;
-                Info << "###########" << endl;
+                if (currentIteration_ > static_cast<int>(1.1 * averagingStartedAt_) && currentIteration_ > static_cast<int>(averagingMinIter_ + averagingStartedAt_))
+                {
+                    Info << "###########" << endl;
+                    Info << "Simulation should stop!!!!" << endl;
+                    Info << "###########" << endl;
+                    OFstream os(mesh_.time().globalPath() + "/FINISHED");
+                    simulationFinished_ = true;
+                }
+                // Info << "###########" << endl;
+                // Info << "Simulation should stop!!!!" << endl;
+                // Info << "###########" << endl;
+                // OFstream os(mesh_.time().globalPath() + "/FINISHED");
             }
         }
     }
@@ -284,7 +309,7 @@ void Foam::functionObjects::convergenceDetection::turnOnAveraging()
         mesh_,
         IOobject::MUST_READ_IF_MODIFIED,
         IOobject::AUTO_WRITE));
-    averaging.subDict("fieldAverage1").set("timeStart", forces_data_.size());
+    averaging.subDict("fieldAverage1").set("timeStart", currentIteration_);
     averaging.subDict("fieldAverage1").set("enabled", true);
     averaging.regIOobject::write();
 }
@@ -309,32 +334,33 @@ double Foam::functionObjects::convergenceDetection::meanValue(std::vector<double
 
 double Foam::functionObjects::convergenceDetection::calculatePolynomGradAveraging()
 {
-    double averagingSize = forces_data_.size() / averagingStartedAt_;
+    int averagingSize = currentIteration_ - averagingStartedAt_;
 
     // allow some data to come in
-    if (averagingSize > 20)
+    if (averagingSize > 5)
     {
-        double xMax = forces_data_.size() / averagingStartedAt_;
+        double xMax = currentIteration_ / averagingStartedAt_;
+
         std::vector<double> forcesNormalized = divideForcesByScalar(normalizedForcesMeanConverged_);
 
-        std::vector<double>
-            xAxisGeneral = arange(
-                1 + (xMax / averagingSize),
-                (xMax + xMax / averagingSize),
-                (xMax / averagingSize));
+        double start = xMax / averagingSize;
+        double end = xMax + xMax / averagingSize;
+        double step = xMax / averagingSize;
+
+        std::vector<double> xAxisGeneral = arange(start, end, step);
 
         int windowForcesPolynom = xAxisGeneral.size() * windowPolynomAveraging_;
 
-        std::vector<double> normalizedForces(forcesNormalized.end() - windowForcesPolynom, forcesNormalized.end());
+        std::vector<double> polynomForces(forcesNormalized.end() - windowForcesPolynom, forcesNormalized.end());
 
-        std::vector<double> xAxisPolynom(xAxisGeneral.size() - windowForcesPolynom, xAxisGeneral.size());
+        std::vector<double> xAxisPolynom(xAxisGeneral.end() - windowForcesPolynom, xAxisGeneral.end());
 
         if (xAxisPolynom.size() < 5)
         {
             return 0.0;
         }
 
-        std::vector<double> polynom = polyfit(xAxisPolynom, normalizedForces, 1, {0});
+        std::vector<double> polynom = polyfit(xAxisPolynom, polynomForces, 1, {0});
 
         return static_cast<double>(fabs(polynom[1]));
     }
@@ -344,8 +370,8 @@ double Foam::functionObjects::convergenceDetection::calculatePolynomGradAveragin
 double
 Foam::functionObjects::convergenceDetection::calculatePolynomGrad()
 {
-    int normalizationForcesWindow = static_cast<int>(forces_data_.size() * windowNormalization_);
-    int windowForcesPolynom = static_cast<int>(forces_data_.size() * windowPolynom_);
+    int normalizationForcesWindow = static_cast<int>(currentIteration_ * windowNormalization_);
+    int windowForcesPolynom = static_cast<int>(currentIteration_ * windowPolynom_);
 
     std::vector<double> normalizedForces(forces_data_.end() - normalizationForcesWindow, forces_data_.end());
 
@@ -353,9 +379,9 @@ Foam::functionObjects::convergenceDetection::calculatePolynomGrad()
 
     std::vector<double> forcesNormalized = divideForcesByScalar(forcesMean);
 
-    double start = 1.0f / forces_data_.size();
-    double end = 1.0f + 1.0f / forces_data_.size();
-    double step = 1.0f / forces_data_.size();
+    double start = 1.0f / currentIteration_;
+    double end = 1.0f + 1.0f / currentIteration_;
+    double step = 1.0f / currentIteration_;
 
     // Info << "Start: " << start << " End: " << end << " Step: " << step << endl;
 
@@ -392,7 +418,7 @@ double Foam::functionObjects::convergenceDetection::checkCriteriaForAveraging()
     int evaluationWindow = static_cast<int>(
         windowEvaluationAveraging_ * polyVectorAveraging_.size());
 
-    std::vector<double> vectorForEvaluation(polyVectorAveraging_.size() - evaluationWindow, polyVectorAveraging_.size());
+    std::vector<double> vectorForEvaluation(polyVectorAveraging_.end() - evaluationWindow, polyVectorAveraging_.end());
 
     if (vectorForEvaluation.size() > 0)
     {
