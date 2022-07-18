@@ -76,7 +76,7 @@ namespace Foam
         for (int i = 0; i < tnp1; ++i)
         {
             X[i] = 0;
-            for (int j = 0; j < N; ++j)
+            for (size_t j = 0; j < N; ++j)
                 X[i] += static_cast<double>(pow(x[j], i));
         }
 
@@ -95,7 +95,7 @@ namespace Foam
         for (int i = 0; i < np1; ++i)
         {
             Y[i] = static_cast<double>(0);
-            for (int j = 0; j < N; ++j)
+            for (size_t j = 0; j < N; ++j)
             {
                 Y[i] += static_cast<double>(pow(x[j], i) * y[j]);
             }
@@ -180,12 +180,14 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
       simulationFinished_(false),
       currentIteration_(0),
       averagingStartedAt_(0),
+      patches_(dict.getOrDefault<wordRes>("patches", wordRes())),
+      rhoName_(dict.getOrDefault<word>("rho", "rhoInf")),
+      rhoInf_(dict.getOrDefault<double>("rhoInf", 1)),
+      CofR_(dict.getOrDefault<vector>("CofR", vector::zero)),
       normalizedForcesMeanConverged_(0),
       forces_data_(0),
       polyVector_(0),
-      polyVectorAveraging_(),
-      forcesDict_(dictionary(IFstream("system/forces")()))
-//   averagingDict_(dictionary(IFstream("system/averaging")())),
+      polyVectorAveraging_()
 
 {
     read(dict);
@@ -209,7 +211,15 @@ bool Foam::functionObjects::convergenceDetection::read(const dictionary &dict)
 
 bool Foam::functionObjects::convergenceDetection::execute()
 {
-    forces f("forces", mesh_.time(), forcesDict_.subDict("forces"));
+    dictionary forcesDict;
+    forcesDict.add("type", functionObjects::forces::typeName);
+    forcesDict.add("patches", patches_);
+    forcesDict.add("rhoInf", rhoInf_);
+    forcesDict.add("rho", rhoName_);
+    forcesDict.add("log", false);
+    forcesDict.add("CofR", CofR_);
+
+    forces f("forces", obr_.time(), forcesDict);
 
     f.calcForcesMoments();
 
@@ -219,7 +229,7 @@ bool Foam::functionObjects::convergenceDetection::execute()
 
     forces_data_.push_back(totalForce);
 
-    currentIteration_ = mesh_.time().value();
+    currentIteration_ = obr_.time().value();
 
     // need few iterations before starting calculation
     if (currentIteration_ >= 5)
@@ -228,85 +238,103 @@ bool Foam::functionObjects::convergenceDetection::execute()
 
         polyVector_.push_back(caclculatedPolynomGrad);
 
-        if (checkCriteriaForConvergence() < conditionConvergence_ && currentIteration_ > convergenceMinIter_ && !convergenceFound_)
-        {
-            convergenceFound_ = true;
-            Info << "###########" << endl;
-            Info << "Convergence Found" << endl;
-            Info << "###########" << endl;
-
-            averagingStartedAt_ = currentIteration_;
-
-            turnOnAveraging();
-        }
-
-        if (currentIteration_ > maxStepConvergence_ && !convergenceFound_)
-        {
-            convergenceFound_ = true;
-            Info << "###########" << endl;
-            Info << "Forced Convergence Found" << endl;
-            Info << "###########" << endl;
-
-            averagingStartedAt_ = currentIteration_;
-
-            turnOnAveraging();
-        }
-
-        int normalizationForcesWindow = static_cast<int>(currentIteration_ * windowNormalization_);
-
-        std::vector<double> normalizedForces(forces_data_.end() - normalizationForcesWindow, forces_data_.end());
-
-        normalizedForcesMeanConverged_ = meanValue(normalizedForces);
-
-        if (normalizedForcesMeanConverged_ > 0 && convergenceFound_)
-        {
-            double test1 = normalizedForcesMeanConverged_ / forceStabilityFactor_;
-            double test2 = normalizedForcesMeanConverged_ * forceStabilityFactor_;
-            double lastIterationForces = forces_data_.back();
-
-            if (lastIterationForces < test1 or lastIterationForces > test2)
-            {
-                FatalErrorInFunction
-                    << "Forces Exploded, mean force converged" << lastIterationForces << nl
-                    << abort(FatalError);
-            }
-        }
+        checkConvergence();
 
         if (!simulationFinished_ && convergenceFound_)
         {
-            double caclculatedPolynomGradAveraging = calculatePolynomGradAveraging();
-
-            polyVectorAveraging_.push_back(caclculatedPolynomGradAveraging);
-
-            Info << "checkCriteriaForAveraging(): " << checkCriteriaForAveraging() << " conditionAveraging_: " << conditionAveraging_ << endl;
-
-            if (checkCriteriaForAveraging() < conditionAveraging_ && checkCriteriaForAveraging() > 0.0 and currentIteration_ > static_cast<int>(1.25 * averagingStartedAt_) && !simulationFinished_)
-            {
-                if (currentIteration_ > static_cast<int>(1.1 * averagingStartedAt_) && currentIteration_ > static_cast<int>(averagingMinIter_ + averagingStartedAt_))
-                {
-                    Info << "###########" << endl;
-                    Info << "Simulation should stop!!!!" << endl;
-                    Info << "###########" << endl;
-                    OFstream os(mesh_.time().globalPath() + "/FINISHED");
-                    simulationFinished_ = true;
-                }
-                // Info << "###########" << endl;
-                // Info << "Simulation should stop!!!!" << endl;
-                // Info << "###########" << endl;
-                // OFstream os(mesh_.time().globalPath() + "/FINISHED");
-            }
+            checkIfForcesExploded();
+            checkIfFinished();
         }
     }
 
     return true;
 }
 
+void Foam::functionObjects::convergenceDetection::checkIfFinished()
+{
+    double caclculatedPolynomGradAveraging = calculatePolynomGradAveraging();
+
+    polyVectorAveraging_.push_back(caclculatedPolynomGradAveraging);
+
+    // Info << "checkCriteriaForAveraging(): " << checkCriteriaForAveraging() << " conditionAveraging_: " << conditionAveraging_ << endl;
+
+    if (checkCriteriaForAveraging() < conditionAveraging_ &&
+        checkCriteriaForAveraging() > 0.0 &&
+        currentIteration_ > static_cast<int>(1.25 * averagingStartedAt_) &&
+        !simulationFinished_)
+    {
+        if (currentIteration_ > static_cast<int>(1.1 * averagingStartedAt_) &&
+            currentIteration_ > static_cast<int>(averagingMinIter_ + averagingStartedAt_))
+        {
+            Info << "###########" << endl;
+            Info << "Simulation should stop!!!!" << endl;
+            Info << "###########" << endl;
+            OFstream os(obr_.time().globalPath() + "/FINISHED");
+            simulationFinished_ = true;
+        }
+        // Info << "###########" << endl;
+        // Info << "Simulation should stop!!!!" << endl;
+        // Info << "###########" << endl;
+        // OFstream os(obr_.time().globalPath() + "/FINISHED");
+    }
+}
+
+void Foam::functionObjects::convergenceDetection::checkIfForcesExploded()
+{
+    int normalizationForcesWindow = static_cast<int>(currentIteration_ * windowNormalization_);
+
+    std::vector<double> normalizedForces(forces_data_.end() - normalizationForcesWindow, forces_data_.end());
+
+    normalizedForcesMeanConverged_ = meanValue(normalizedForces);
+
+    if (normalizedForcesMeanConverged_ > 0 && convergenceFound_)
+    {
+        double test1 = normalizedForcesMeanConverged_ / forceStabilityFactor_;
+        double test2 = normalizedForcesMeanConverged_ * forceStabilityFactor_;
+        double lastIterationForces = forces_data_.back();
+
+        if (lastIterationForces < test1 or lastIterationForces > test2)
+        {
+            FatalErrorInFunction
+                << "Forces Exploded, mean force converged" << lastIterationForces << nl
+                << abort(FatalError);
+        }
+    }
+}
+
+void Foam::functionObjects::convergenceDetection::checkConvergence()
+{
+    if (checkCriteriaForConvergence() < conditionConvergence_ && currentIteration_ > convergenceMinIter_ && !convergenceFound_)
+    {
+        convergenceFound_ = true;
+        Info << "###########" << endl;
+        Info << "Convergence Found" << endl;
+        Info << "###########" << endl;
+
+        averagingStartedAt_ = currentIteration_;
+
+        turnOnAveraging();
+    }
+
+    if (currentIteration_ > maxStepConvergence_ && !convergenceFound_)
+    {
+        convergenceFound_ = true;
+        Info << "###########" << endl;
+        Info << "Forced Convergence Found" << endl;
+        Info << "###########" << endl;
+
+        averagingStartedAt_ = currentIteration_;
+
+        turnOnAveraging();
+    }
+}
+
 void Foam::functionObjects::convergenceDetection::turnOnAveraging()
 {
     IOdictionary averaging(IOobject(
         "averaging",
-        mesh_.time().caseSystem(),
-        mesh_,
+        obr_.time().caseSystem(),
+        obr_,
         IOobject::MUST_READ_IF_MODIFIED,
         IOobject::AUTO_WRITE));
     averaging.subDict("fieldAverage1").set("timeStart", currentIteration_);

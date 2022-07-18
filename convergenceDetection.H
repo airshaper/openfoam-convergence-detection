@@ -165,8 +165,9 @@ namespace Foam
         {
 
             scalar windowNormalization_;
-            scalar windowPolynomAveraging_;
             scalar windowPolynom_;
+            scalar windowPolynomAveraging_;
+
             scalar windowEvaluation_;
             scalar windowEvaluationAveraging_;
             scalar conditionConvergence_;
@@ -180,13 +181,15 @@ namespace Foam
             bool simulationFinished_;
             int currentIteration_;
             int averagingStartedAt_;
+            wordRes patches_;
+            word rhoName_;
+            double rhoInf_;
+            vector CofR_;
             scalar normalizedForcesMeanConverged_;
             std::vector<double>
                 forces_data_;
             std::vector<double> polyVector_;
             std::vector<double> polyVectorAveraging_;
-            dictionary forcesDict_;
-            // dictionary averagingDict_;
 
         public:
             //- Runtime type information
@@ -237,6 +240,9 @@ namespace Foam
 
             virtual double checkCriteriaForConvergence();
             virtual double checkCriteriaForAveraging();
+            virtual void checkIfFinished();
+            virtual void checkConvergence();
+            virtual void checkIfForcesExploded();
 
             virtual void
             turnOnAveraging();
