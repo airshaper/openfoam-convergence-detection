@@ -35,138 +35,175 @@ License
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
-
 namespace Foam
 {
-
-std::vector<float> linspace(float start, float end, float step)
-{
-    vector<float> range;
-    float delta = (end-start)/float(step-1);
-    for(int i=0; i<step; i++) {
-        range.push_back(min + i*delta);
+    static std::vector<double> arange(double start, double stop, double step)
+    {
+        std::vector<double> values;
+        for (double value = start; value < stop; value += step)
+            values.push_back(value);
+        return values;
     }
-    return range;
-}
+    // https://gist.github.com/chrisengelsma/108f7ab0a746323beaaf7d6634cf4add
+    static std::vector<double> polyfit(
+        const std::vector<double> x,
+        const std::vector<double> y,
+        const int order,
+        std::vector<double> coeffs)
+    {
+        // The size of xValues and yValues should be same
+        if (x.size() != y.size())
+        {
+            throw std::runtime_error("The size of x & y arrays are different");
+            return {};
+        }
+        // The size of xValues and yValues cannot be 0, should not happen
+        if (x.size() == 0 || y.size() == 0)
+        {
+            throw std::runtime_error("The size of x or y arrays is 0");
+            return {};
+        }
 
-static std::vector<double> divideVectorByScalar(std::vector<double> &forces_, double d) 
-{
-    std::vector<double> dividedForces = {0};
-    for (auto itr : forces_) {
-         dividedForces.push_back(itr / d);
+        size_t N = x.size();
+        int n = order;
+        int np1 = n + 1;
+        int np2 = n + 2;
+        int tnp1 = 2 * n + 1;
+        double tmp;
+
+        // X = vector that stores values of sigma(xi^2n)
+        std::vector<double> X(tnp1);
+        for (int i = 0; i < tnp1; ++i)
+        {
+            X[i] = 0;
+            for (int j = 0; j < N; ++j)
+                X[i] += static_cast<double>(pow(x[j], i));
+        }
+
+        // a = vector to store final coefficients.
+        std::vector<double> a(np1);
+
+        // B = normal augmented matrix that stores the equations.
+        std::vector<std::vector<double>> B(np1, std::vector<double>(np2, 0));
+
+        for (int i = 0; i <= n; ++i)
+            for (int j = 0; j <= n; ++j)
+                B[i][j] = X[i + j];
+
+        // Y = vector to store values of sigma(xi^n * yi)
+        std::vector<double> Y(np1);
+        for (int i = 0; i < np1; ++i)
+        {
+            Y[i] = static_cast<double>(0);
+            for (int j = 0; j < N; ++j)
+            {
+                Y[i] += static_cast<double>(pow(x[j], i) * y[j]);
+            }
+        }
+
+        // Load values of Y as last column of B
+        for (int i = 0; i <= n; ++i)
+            B[i][np1] = Y[i];
+
+        n += 1;
+        int nm1 = n - 1;
+
+        // Pivotisation of the B matrix.
+        for (int i = 0; i < n; ++i)
+            for (int k = i + 1; k < n; ++k)
+                if (B[i][i] < B[k][i])
+                    for (int j = 0; j <= n; ++j)
+                    {
+                        tmp = B[i][j];
+                        B[i][j] = B[k][j];
+                        B[k][j] = tmp;
+                    }
+
+        // Performs the Gaussian elimination.
+        // (1) Make all elements below the pivot equals to zero
+        //     or eliminate the variable.
+        for (int i = 0; i < nm1; ++i)
+            for (int k = i + 1; k < n; ++k)
+            {
+                double t = B[k][i] / B[i][i];
+                for (int j = 0; j <= n; ++j)
+                    B[k][j] -= t * B[i][j]; // (1)
+            }
+
+        // Back substitution.
+        // (1) Set the variable as the rhs of last equation
+        // (2) Subtract all lhs values except the target coefficient.
+        // (3) Divide rhs by coefficient of variable being calculated.
+        for (int i = nm1; i >= 0; --i)
+        {
+            a[i] = B[i][n]; // (1)
+            for (int j = 0; j < n; ++j)
+                if (j != i)
+                    a[i] -= B[i][j] * a[j]; // (2)
+            a[i] /= B[i][i];                // (3)
+        }
+
+        coeffs.resize(a.size());
+        for (size_t i = 0; i < a.size(); ++i)
+            coeffs[i] = a[i];
+
+        return coeffs;
     }
 
-    return dividedForces;
-}
-
-static double meanValue(std::vector<double> forces_)
-
-{
-    double sum = 0.0;
-    for (auto itr : forces_) {
-         sum += itr;
+    namespace functionObjects
+    {
+        defineTypeNameAndDebug(convergenceDetection, 0);
+        addToRunTimeSelectionTable(functionObject, convergenceDetection, dictionary);
     }
-
-    return sum / forces_.size();
 }
-
-static double calculate_polynom_grad
-(
-    std::vector<double> forces_, 
-    int normalizationForcesWindow_, 
-    double windowPolynom_
-)
-{
-    std::vector<double> normalizedForces(forces_.end() - normalizationForcesWindow_, forces_.end());
-
-    double forcesMean = meanValue(normalizedForces);
-
-    std::vector<double> forcesNormalized = divideVectorByScalar(forces_, forcesMean);
-
-    Info << "Forces size: " << forces_.size() << endl;
-
-    float start = 1.0/forces_.size();
-    float end = 2.0/forces_.size();
-    float step = 1.0/forces_.size();
-
-    Info << "Start: " << start << " End: " << end << " Step: " << step << endl;
-
-    std::vector<float> v = linspace(start, end, step);
-    // auto L = xAxisGeneral.length();
-
-    // std::vector<double> normForces = normalizedForces;
-
-    // 
-
-    Info << "Axis: " << v << endl;
-
-    // std::vector<float> v(100);
-
-    //std::iota(v.begin(), v.end(), spacer(1.132))
-    
-
-    // Info << v.begin() << v.end() << endl;
-
-    // std::vector<double> forcesNormalized(forces_.end() - windowPolynom_, forces_.end());
-
-    // Info << normalizedForces << endl;
-    
-    return 0.0;
-}
-namespace functionObjects
-{
-    defineTypeNameAndDebug(convergenceDetection, 0);
-    addToRunTimeSelectionTable(functionObject, convergenceDetection, dictionary);
-}
-}
-
 
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
 
-Foam::functionObjects::convergenceDetection::convergenceDetection
-(
-    const word& name,
-    const Time& runTime,
-    const dictionary& dict
-)
-:
-    forces(name, runTime, dict, false),
-    windowNormalization_(dict.getOrDefault<scalar>("windowNormalization", 0.5)),
-    windowPolynom_(dict.getOrDefault<scalar>("windowPolynom", 0.5)),
-    windowPolynomAveraging_(dict.getOrDefault<scalar>("windowPolynomAveraging", 0.99)),
-    windowEvaluation_(dict.getOrDefault<scalar>("windowEvaluation", 0.333)),
-    windowEvaluationAveraging_(dict.getOrDefault<scalar>("windowEvaluationAveraging", 0.333)),
-    conditionConvergence_(dict.getOrDefault<scalar>("conditionConvergence", 0.075)),
-    conditionAveraging_(dict.getOrDefault<scalar>("conditionAveraging", 0.025)),
-    maxStepConvergence_(dict.getOrDefault<scalar>("maxStepConvergence", 2500)),
-    maxStepAveraging_(dict.getOrDefault<scalar>("maxStepAveraging", 2500)),
-    forceStabilityDactor_(dict.getOrDefault<scalar>("forceStabilityDactor", 2)),
-    convergenceMinIter_(dict.getOrDefault<scalar>("convergenceMinIter", 200)),
-    averagingMinIter_(dict.getOrDefault<scalar>("averagingMinIter", 200)),
-    forces_data_(0),
-    polyVector_(0),
-    forcesDict_(dictionary(IFstream("system/forces")()))
+Foam::functionObjects::convergenceDetection::convergenceDetection(
+    const word &name,
+    const Time &runTime,
+    const dictionary &dict)
+    : forces(name, runTime, dict, false),
+      windowNormalization_(dict.getOrDefault<scalar>("windowNormalization", 0.5)),
+      windowPolynom_(dict.getOrDefault<scalar>("windowPolynom", 0.5)),
+      windowPolynomAveraging_(dict.getOrDefault<scalar>("windowPolynomAveraging", 0.99)),
+      windowEvaluation_(dict.getOrDefault<scalar>("windowEvaluation", 0.333)),
+      windowEvaluationAveraging_(dict.getOrDefault<scalar>("windowEvaluationAveraging", 0.333)),
+      conditionConvergence_(dict.getOrDefault<scalar>("conditionConvergence", 0.075)),
+      conditionAveraging_(dict.getOrDefault<scalar>("conditionAveraging", 0.025)),
+      maxStepConvergence_(dict.getOrDefault<scalar>("maxStepConvergence", 2500)),
+      maxStepAveraging_(dict.getOrDefault<scalar>("maxStepAveraging", 2500)),
+      forceStabilityFactor_(dict.getOrDefault<scalar>("forceStabilityFactor", 2)),
+      convergenceMinIter_(dict.getOrDefault<scalar>("convergenceMinIter", 200)),
+      averagingMinIter_(dict.getOrDefault<scalar>("averagingMinIter", 200)),
+      convergenceFound_(false),
+      averagingStartedAt_(0),
+      normalizedForcesMeanConverged_(0),
+      forces_data_(0),
+      polyVector_(0),
+      polyVectorAveraging_(),
+      forcesDict_(dictionary(IFstream("system/forces")()))
+//   averagingDict_(dictionary(IFstream("system/averaging")())),
+
 {
-    read(dict);}
+    read(dict);
+}
 
 // * * * * * * * * * * * * * * * Protected Functions  * * * * * * * * * * * * * //
 
-
-
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
-bool Foam::functionObjects::convergenceDetection::read(const dictionary& dict)
+bool Foam::functionObjects::convergenceDetection::read(const dictionary &dict)
 {
-    //dict.readEntry("windowNormalization", windowNormalization_);
+    // dict.readEntry("windowNormalization", windowNormalization_);
 
-    //Info << "Window: " << windowNormalization_ << endl;
-    // dict.readEntry("labelData", labelData_);
-    // dict.readIfPresent("wordData", wordData_);
-    // dict.readEntry("scalarData", scalarData_);
+    // Info << "Window: " << windowNormalization_ << endl;
+    //  dict.readEntry("labelData", labelData_);
+    //  dict.readIfPresent("wordData", wordData_);
+    //  dict.readEntry("scalarData", scalarData_);
 
     return true;
 }
-
 
 bool Foam::functionObjects::convergenceDetection::execute()
 {
@@ -176,34 +213,202 @@ bool Foam::functionObjects::convergenceDetection::execute()
 
     const vector sumForce = f.forceEff();
 
-    const scalar totalForce = sqrt(pow(sumForce[0], 2) + pow(sumForce[1], 2) + pow(sumForce[2], 2));
+    const double totalForce = sqrt(pow(sumForce[0], 2) + pow(sumForce[1], 2) + pow(sumForce[2], 2));
 
     forces_data_.push_back(totalForce);
 
-    int normalizationForcesWindow = static_cast<int>(forces_data_.size() * windowNormalization_);
-    int windowForcesPolynom = int(forces_data_.size() * windowPolynom_);
+    // need few iterations before starting calculation
+    if (mesh_.time().timeToUserTime(mesh_.time().value()) >= 5)
+    {
+        double caclculatedPolynomGrad = calculatePolynomGrad();
 
+        polyVector_.push_back(caclculatedPolynomGrad);
 
-    if (mesh_.time().timeToUserTime(mesh_.time().value()) > 1) {
-        double caclculated = calculate_polynom_grad(forces_data_, normalizationForcesWindow, windowForcesPolynom);
-        // Info << "caclculated: " << caclculated << endl;
+        if (checkCriteriaForConvergence() < conditionConvergence_ && forces_data_.size() > convergenceMinIter_ && !convergenceFound_)
+        {
+            convergenceFound_ = true;
+            Info << "###########" << endl;
+            Info << "Convergence Found" << endl;
+            Info << "###########" << endl;
+
+            averagingStartedAt_ = forces_data_.size();
+
+            turnOnAveraging();
+        }
+
+        int normalizationForcesWindow = static_cast<int>(forces_data_.size() * windowNormalization_);
+
+        std::vector<double> normalizedForces(forces_data_.end() - normalizationForcesWindow, forces_data_.end());
+
+        normalizedForcesMeanConverged_ = meanValue(normalizedForces);
+
+        if (normalizedForcesMeanConverged_ > 0 && convergenceFound_)
+        {
+
+            double test1 = normalizedForcesMeanConverged_ / forceStabilityFactor_;
+            double test2 = normalizedForcesMeanConverged_ * forceStabilityFactor_;
+            double lastIterationForces = forces_data_.back();
+
+            if (lastIterationForces < test1 or lastIterationForces > test2)
+            {
+                FatalErrorInFunction
+                    << "Forces Exploded, mean force converged" << lastIterationForces << nl
+                    << abort(FatalError);
+            }
+
+            double caclculatedPolynomGradAveraging = calculatePolynomGradAveraging();
+
+            polyVectorAveraging_.push_back(caclculatedPolynomGradAveraging);
+        }
+
+        if (convergenceFound_)
+        {
+            Info << "checkCriteriaForAveraging" << endl;
+            if (checkCriteriaForAveraging() < conditionAveraging_ && checkCriteriaForAveraging() > 0.0 and forces_data_.size() > static_cast<int>(1.25 * averagingStartedAt_))
+            {
+                Info << "###########" << endl;
+                Info << "Simulation should stop!!!!" << endl;
+                Info << "###########" << endl;
+            }
+        }
     }
 
-    
     return true;
 }
 
+void Foam::functionObjects::convergenceDetection::turnOnAveraging()
+{
+    IOdictionary averaging(IOobject(
+        "averaging",
+        mesh_.time().caseSystem(),
+        mesh_,
+        IOobject::MUST_READ_IF_MODIFIED,
+        IOobject::AUTO_WRITE));
+    averaging.subDict("fieldAverage1").set("timeStart", forces_data_.size());
+    averaging.subDict("fieldAverage1").set("enabled", true);
+    averaging.regIOobject::write();
+}
+
+std::vector<double> Foam::functionObjects::convergenceDetection::divideForcesByScalar(double d)
+{
+    std::vector<double> dividedForces = {0};
+    for (auto itr : forces_data_)
+        dividedForces.push_back(itr / d);
+
+    return dividedForces;
+}
+
+double Foam::functionObjects::convergenceDetection::meanValue(std::vector<double> normalizedForces)
+{
+    double sum = 0.0;
+    for (auto itr : normalizedForces)
+        sum += itr;
+
+    return sum / normalizedForces.size();
+}
+
+double Foam::functionObjects::convergenceDetection::calculatePolynomGradAveraging()
+{
+    double averagingSize = forces_data_.size() / averagingStartedAt_;
+
+    // allow some data to come in
+    if (averagingSize > 20)
+    {
+        double xMax = forces_data_.size() / averagingStartedAt_;
+        std::vector<double> forcesNormalized = divideForcesByScalar(normalizedForcesMeanConverged_);
+
+        std::vector<double>
+            xAxisGeneral = arange(
+                1 + (xMax / averagingSize),
+                (xMax + xMax / averagingSize),
+                (xMax / averagingSize));
+
+        int windowForcesPolynom = xAxisGeneral.size() * windowPolynomAveraging_;
+
+        std::vector<double> normalizedForces(forcesNormalized.end() - windowForcesPolynom, forcesNormalized.end());
+
+        std::vector<double> xAxisPolynom(xAxisGeneral.size() - windowForcesPolynom, xAxisGeneral.size());
+
+        if (xAxisPolynom.size() < 5)
+        {
+            return 0.0;
+        }
+
+        std::vector<double> polynom = polyfit(xAxisPolynom, normalizedForces, 1, {0});
+
+        return static_cast<double>(fabs(polynom[1]));
+    }
+    return 0.0;
+}
+
+double
+Foam::functionObjects::convergenceDetection::calculatePolynomGrad()
+{
+    int normalizationForcesWindow = static_cast<int>(forces_data_.size() * windowNormalization_);
+    int windowForcesPolynom = static_cast<int>(forces_data_.size() * windowPolynom_);
+
+    std::vector<double> normalizedForces(forces_data_.end() - normalizationForcesWindow, forces_data_.end());
+
+    double forcesMean = meanValue(normalizedForces);
+
+    std::vector<double> forcesNormalized = divideForcesByScalar(forcesMean);
+
+    double start = 1.0f / forces_data_.size();
+    double end = 1.0f + 1.0f / forces_data_.size();
+    double step = 1.0f / forces_data_.size();
+
+    // Info << "Start: " << start << " End: " << end << " Step: " << step << endl;
+
+    std::vector<double> xAxisGeneral = arange(start, end, step);
+
+    std::vector<double> polynomForces(forcesNormalized.end() - windowForcesPolynom, forcesNormalized.end());
+
+    std::vector<double> xAxisPolynom(xAxisGeneral.end() - windowForcesPolynom, xAxisGeneral.end());
+
+    // Info << "xAxisPolynom: " << xAxisPolynom << endl;
+    // Info << "polynomForces: " << polynomForces << endl;
+
+    std::vector<double> polynom = polyfit(xAxisPolynom, polynomForces, 1, {0});
+
+    return static_cast<double>(fabs(polynom[1]));
+}
+
+// DRY
+double Foam::functionObjects::convergenceDetection::checkCriteriaForConvergence()
+{
+    int evaluationWindow = static_cast<int>(windowEvaluation_ * polyVector_.size());
+    std::vector<double> vectorForEvaluation(polyVector_.end() - evaluationWindow, polyVector_.end());
+
+    if (vectorForEvaluation.size() > 0)
+    {
+        return *std::max_element(vectorForEvaluation.begin(), vectorForEvaluation.end());
+    }
+    return 0.0;
+}
+
+// DRY
+double Foam::functionObjects::convergenceDetection::checkCriteriaForAveraging()
+{
+    int evaluationWindow = static_cast<int>(
+        windowEvaluationAveraging_ * polyVectorAveraging_.size());
+
+    std::vector<double> vectorForEvaluation(polyVectorAveraging_.size() - evaluationWindow, polyVectorAveraging_.size());
+
+    if (vectorForEvaluation.size() > 0)
+    {
+        return *std::max_element(vectorForEvaluation.begin(), vectorForEvaluation.end());
+    }
+    return 0.0;
+}
 
 bool Foam::functionObjects::convergenceDetection::end()
 {
     return true;
 }
 
-
 bool Foam::functionObjects::convergenceDetection::write()
 {
     return true;
 }
-
 
 // ************************************************************************* //

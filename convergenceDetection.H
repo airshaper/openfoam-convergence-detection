@@ -153,94 +153,96 @@ SourceFiles
 
 namespace Foam
 {
-namespace functionObjects
-{
+    namespace functionObjects
+    {
 
-/*---------------------------------------------------------------------------*\
-                   Class convergenceDetection Declaration
-\*---------------------------------------------------------------------------*/
+        /*---------------------------------------------------------------------------*\
+                           Class convergenceDetection Declaration
+        \*---------------------------------------------------------------------------*/
 
-class convergenceDetection
-:
-    public forces
-{
+        class convergenceDetection
+            : public forces
+        {
 
-    scalar windowNormalization_;
-    scalar windowPolynomAveraging_;
-    scalar windowPolynom_;
-    scalar windowEvaluation_;
-    scalar windowEvaluationAveraging_;
-    scalar conditionConvergence_;
-    scalar conditionAveraging_;
-    scalar maxStepConvergence_;
-    scalar maxStepAveraging_;
-    scalar forceStabilityDactor_;
-    scalar convergenceMinIter_;
-    scalar averagingMinIter_;
-    std::vector<double> forces_data_;
-    std::vector<double> polyVector_;
-    dictionary forcesDict_;
+            scalar windowNormalization_;
+            scalar windowPolynomAveraging_;
+            scalar windowPolynom_;
+            scalar windowEvaluation_;
+            scalar windowEvaluationAveraging_;
+            scalar conditionConvergence_;
+            scalar conditionAveraging_;
+            scalar maxStepConvergence_;
+            scalar maxStepAveraging_;
+            scalar forceStabilityFactor_;
+            scalar convergenceMinIter_;
+            scalar averagingMinIter_;
+            bool convergenceFound_;
+            int averagingStartedAt_;
+            scalar normalizedForcesMeanConverged_;
+            std::vector<double>
+                forces_data_;
+            std::vector<double> polyVector_;
+            std::vector<double> polyVectorAveraging_;
+            dictionary forcesDict_;
+            // dictionary averagingDict_;
 
-public:
+        public:
+            //- Runtime type information
+            TypeName("convergenceDetection");
 
-    //- Runtime type information
-    TypeName("convergenceDetection");
+            // Constructors
 
+            //- Construct from Time and dictionary
+            convergenceDetection(
+                const word &name,
+                const Time &runTime,
+                const dictionary &dict);
 
-    // Constructors
+            //- No copy construct
+            convergenceDetection(const convergenceDetection &) = delete;
 
-        //- Construct from Time and dictionary
-        convergenceDetection
-        (
-            const word& name,
-            const Time& runTime,
-            const dictionary& dict
-        );
+            //- No copy assignment
+            void operator=(const convergenceDetection &) = delete;
 
-        //- No copy construct
-        convergenceDetection(const convergenceDetection&) = delete;
+            //- Destructor
+            virtual ~convergenceDetection() = default;
 
-        //- No copy assignment
-        void operator=(const convergenceDetection&) = delete;
+            // Member Functions
 
+            //- Read the convergenceDetection data
+            virtual bool read(const dictionary &dict);
 
-    //- Destructor
-    virtual ~convergenceDetection() = default;
+            //- Execute, currently does nothing
+            virtual bool execute();
 
+            //- Execute at the final time-loop, currently does nothing
+            virtual bool end();
 
-    // Member Functions
+            //- Write the convergenceDetection
+            virtual bool
+            write();
 
-        //- Read the convergenceDetection data
-        virtual bool read(const dictionary& dict);
+        protected:
+            // virtual double meanValue(std::vector<double>& forces_);
+            // virtual double calculate_polynom_grad(std::vector<double> forces_);
 
-        //- Execute, currently does nothing
-        virtual bool execute();
+            virtual std::vector<double> divideForcesByScalar(double d);
 
-        //- Execute at the final time-loop, currently does nothing
-        virtual bool end();
+            virtual double meanValue(std::vector<double> normalizedForces);
 
-        //- Write the convergenceDetection
-        virtual bool write();
+            virtual double calculatePolynomGrad();
+            virtual double calculatePolynomGradAveraging();
 
-        
+            virtual double checkCriteriaForConvergence();
+            virtual double checkCriteriaForAveraging();
 
-protected:
-    template <class T>
-    std::vector<double> linspace
-    (
-        T start_in,
-        T end_in,
-        int num_in
-    );
-    // virtual double meanValue(std::vector<double>& forces_);
-    // virtual double calculate_polynom_grad(std::vector<double> forces_);
-    
-};
+            virtual void
+            turnOnAveraging();
+        };
 
+        // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-} // End namespace functionObjects
+    } // End namespace functionObjects
 } // End namespace Foam
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
