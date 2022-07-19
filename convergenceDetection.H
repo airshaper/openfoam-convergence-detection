@@ -182,14 +182,14 @@ namespace Foam
             int currentIteration_;
             int averagingStartedAt_;
             wordRes patches_;
-            word rhoName_;
-            double rhoInf_;
+            word rho_;
+            scalar rhoInf_;
             vector CofR_;
             scalar normalizedForcesMeanConverged_;
-            std::vector<double>
-                forces_data_;
+            std::vector<double> forcesData_;
             std::vector<double> polyVector_;
             std::vector<double> polyVectorAveraging_;
+            autoPtr<OFstream> forcesFilePtr_;
 
         public:
             //- Runtime type information
@@ -237,15 +237,23 @@ namespace Foam
 
             virtual double calculatePolynomGrad();
             virtual double calculatePolynomGradAveraging();
-
             virtual double checkCriteriaForConvergence();
             virtual double checkCriteriaForAveraging();
             virtual void checkIfFinished();
             virtual void checkConvergence();
             virtual void checkIfForcesExploded();
+            // virtual void createIntegratedDataFiles();
+            // virtual void writeIntegratedDataFileHeader(const word &header, OFstream &os) const;
+            // virtual void writeIntegratedDataFiles();
+            // virtual void writeIntegratedDataFile(const vector &sumForces,
+            //                                      OFstream &os) const;
+            virtual std::vector<double> polyfit(const std::vector<double> x,
+                                                const std::vector<double> y,
+                                                const int order,
+                                                std::vector<double> coeffs);
+            virtual std::vector<double> arange(double start, double stop, double step);
 
-            virtual void
-            turnOnAveraging();
+            virtual void turnOnAveraging();
         };
 
         // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
