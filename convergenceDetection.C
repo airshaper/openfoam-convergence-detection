@@ -74,7 +74,7 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
       forcesData_(0),
       polyVector_(0),
       polyVectorAveraging_(),
-      forcesFilePtr_(nullptr)
+      totalForceFilePtr_(nullptr)
 
 {
     read(dict);
@@ -156,12 +156,46 @@ bool Foam::functionObjects::convergenceDetection::write()
 {
     if (writeToFile())
     {
+
+        createIntegratedDataFile();
+        writeIntegratedDataFile(totalForceFilePtr_());
         forces::write();
     }
     return true;
 }
 
 // * * * * * * * * * * * * * * * Protected Functions  * * * * * * * * * * * * * //
+
+void Foam::functionObjects::convergenceDetection::createIntegratedDataFile()
+{
+    if (!totalForceFilePtr_.valid())
+    {
+        totalForceFilePtr_ = createFile("totalForce");
+        writeIntegratedDataFileHeader("totalForce", totalForceFilePtr_());
+    }
+}
+
+void Foam::functionObjects::convergenceDetection::writeIntegratedDataFileHeader(
+    const word &header,
+    OFstream &os) const
+{
+    writeHeader(os, header);
+    writeHeader(os, "");
+    writeCommented(os, "Time");
+    writeTabbed(os, "total (x,y,z)");
+
+    os << endl;
+}
+
+void Foam::functionObjects::convergenceDetection::writeIntegratedDataFile(
+    OFstream &os) const
+{
+    writeCurrentTime(os);
+
+    writeValue(os, forcesData_.back());
+
+    os << endl;
+}
 
 void Foam::functionObjects::convergenceDetection::checkIfFinished()
 {
