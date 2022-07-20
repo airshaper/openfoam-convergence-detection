@@ -208,7 +208,7 @@ void Foam::functionObjects::convergenceDetection::writeDataFileHeader(
 }
 
 void Foam::functionObjects::convergenceDetection::writeDataFile(
-    OFstream &os, std::double &value) const
+    OFstream &os, double &value) const
 {
     writeCurrentTime(os);
 

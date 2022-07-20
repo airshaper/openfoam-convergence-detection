@@ -246,7 +246,7 @@ namespace Foam
             virtual void checkIfForcesExploded();
             virtual void createDataFile();
             virtual void writeDataFileHeader(const word &header, const word &tabbedName, OFstream &os) const;
-            virtual void writeDataFile(OFstream &os, std::double &value) const;
+            virtual void writeDataFile(OFstream &os, double &value) const;
             virtual std::vector<double> polyfit(const std::vector<double> x,
                                                 const std::vector<double> y,
                                                 const int order,
