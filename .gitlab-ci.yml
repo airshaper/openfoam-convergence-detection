@@ -14,3 +14,5 @@ upload_zip:
     - gsutil -h Cache-Control:private cp ./${CI_PROJECT_NAME}-${CI_COMMIT_REF_NAME}.zip gs://airshaper-releases
   except:
     - /^feature\/.*$/
+  tags:
+    - feature
