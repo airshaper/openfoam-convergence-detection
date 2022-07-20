@@ -271,6 +271,9 @@ void Foam::functionObjects::convergenceDetection::checkConvergence()
 
         averagingStartedAt_ = currentIteration_;
 
+        OFstream os(time().globalPath() + "/averaging");
+        os << averagingStartedAt_ << endl;
+
         turnOnAveraging();
     }
 
