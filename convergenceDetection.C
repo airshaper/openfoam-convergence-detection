@@ -74,7 +74,9 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
       forcesData_(0),
       polyVector_(0),
       polyVectorAveraging_(),
-      totalForceFilePtr_(nullptr)
+      totalForceFilePtr_(nullptr),
+      polynomGradFilePtr(nullptr),
+      polynomGradAveragedFilePtr(nullptr)
 
 {
     read(dict);
@@ -157,8 +159,13 @@ bool Foam::functionObjects::convergenceDetection::write()
     if (writeToFile())
     {
 
-        createIntegratedDataFile();
-        writeIntegratedDataFile(totalForceFilePtr_());
+        createDataFile();
+        writeDataFile(totalForceFilePtr_(), forcesData_.back());
+        writeDataFile(polynomGradFilePtr(), polyVector_.back());
+        if (convergenceFound_)
+        {
+            writeDataFile(polynomGradAveragedFilePtr(), polyVectorAveraging_.back());
+        }
         forces::write();
     }
     return true;
@@ -166,33 +173,46 @@ bool Foam::functionObjects::convergenceDetection::write()
 
 // * * * * * * * * * * * * * * * Protected Functions  * * * * * * * * * * * * * //
 
-void Foam::functionObjects::convergenceDetection::createIntegratedDataFile()
+void Foam::functionObjects::convergenceDetection::createDataFile()
 {
     if (!totalForceFilePtr_.valid())
     {
         totalForceFilePtr_ = createFile("totalForce");
-        writeIntegratedDataFileHeader("totalForce", totalForceFilePtr_());
+        writeDataFileHeader("totalForce", "total (x,y,z)", totalForceFilePtr_());
+    }
+
+    if (!polynomGradFilePtr.valid())
+    {
+        polynomGradFilePtr = createFile("polynomGrad");
+        writeDataFileHeader("polynomGrad", "polynomGrad", polynomGradFilePtr());
+    }
+
+    if (!polynomGradAveragedFilePtr.valid())
+    {
+        polynomGradAveragedFilePtr = createFile("polynomGradAveraged");
+        writeDataFileHeader("polynomGradAveraged", "polynomGradAveraged", polynomGradAveragedFilePtr());
     }
 }
 
-void Foam::functionObjects::convergenceDetection::writeIntegratedDataFileHeader(
+void Foam::functionObjects::convergenceDetection::writeDataFileHeader(
     const word &header,
+    const word &tabbedName,
     OFstream &os) const
 {
     writeHeader(os, header);
     writeHeader(os, "");
     writeCommented(os, "Time");
-    writeTabbed(os, "total (x,y,z)");
+    writeTabbed(os, tabbedName);
 
     os << endl;
 }
 
-void Foam::functionObjects::convergenceDetection::writeIntegratedDataFile(
-    OFstream &os) const
+void Foam::functionObjects::convergenceDetection::writeDataFile(
+    OFstream &os, std::double &value) const
 {
     writeCurrentTime(os);
 
-    writeValue(os, forcesData_.back());
+    writeValue(os, value);
 
     os << endl;
 }
@@ -246,7 +266,7 @@ void Foam::functionObjects::convergenceDetection::checkIfForcesExploded()
         if (lastIterationForces < test1 or lastIterationForces > test2)
         {
             FatalErrorInFunction
-                << "Forces Exploded, mean force converged" << lastIterationForces << nl
+                << "Forces Exploded, mean force value converged: " << lastIterationForces << nl
                 << abort(FatalError);
         }
     }

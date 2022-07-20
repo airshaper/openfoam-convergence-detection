@@ -190,6 +190,8 @@ namespace Foam
             std::vector<double> polyVector_;
             std::vector<double> polyVectorAveraging_;
             autoPtr<OFstream> totalForceFilePtr_;
+            autoPtr<OFstream> polynomGradFilePtr;
+            autoPtr<OFstream> polynomGradAveragedFilePtr;
 
         public:
             //- Runtime type information
@@ -242,9 +244,9 @@ namespace Foam
             virtual void checkIfFinished();
             virtual void checkConvergence();
             virtual void checkIfForcesExploded();
-            virtual void createIntegratedDataFile();
-            virtual void writeIntegratedDataFileHeader(const word &header, OFstream &os) const;
-            virtual void writeIntegratedDataFile(OFstream &os) const;
+            virtual void createDataFile();
+            virtual void writeDataFileHeader(const word &header, const word &tabbedName, OFstream &os) const;
+            virtual void writeDataFile(OFstream &os, std::double &value) const;
             virtual std::vector<double> polyfit(const std::vector<double> x,
                                                 const std::vector<double> y,
                                                 const int order,
