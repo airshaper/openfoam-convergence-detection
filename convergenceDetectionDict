@@ -1,0 +1,32 @@
+convergenceDetection1
+{
+    libs (libconvergenceDetection);
+    type convergenceDetection;
+
+    // default settings
+    // windowNormalization 0.5;
+    // windowPolynom 0.5;
+    // windowPolynomAveraging 0.99;
+    // windowEvaluation 0.333;
+    // windowEvaluationAveraging 0.333;
+    // conditionConvergence 0.075;
+    // conditionAveraging 0.025;
+    // maxStepConvergence 2500;
+    // maxStepAveraging 2500;
+    // forceStabilityFactor 2;
+    // convergenceMinIter 200;
+    // averagingMinIter 200;
+    
+    // forces - required
+    // modify according to your case
+    patches         ( #CHANGEME# ); 
+    rho             rhoInf;
+    log             false;
+    rhoInf          1;
+    CofR            ( 0 0 0 );
+    // end of forces  - required
+
+    writeControl    timeStep;
+    timeInterval    1;
+    log             true;
+}
