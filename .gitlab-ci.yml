@@ -1,0 +1,16 @@
+image: "google/cloud-sdk:alpine"
+
+stages:
+  - upload
+
+before_script:
+  - echo "$GOOGLE_SERVICE_ACCOUNT" >> "/root/google.json"
+
+upload_zip:
+  stage: upload
+  script:
+    - git archive -o ${CI_PROJECT_NAME}-${CI_COMMIT_REF_NAME}.zip -9 HEAD
+    - gcloud auth activate-service-account --project=halogen-chemist-162620 --key-file=/root/google.json
+    - gsutil -h Cache-Control:private cp ./${CI_PROJECT_NAME}-${CI_COMMIT_REF_NAME}.zip gs://airshaper-releases
+  except:
+    - /^feature\/.*$/
