@@ -164,28 +164,28 @@ namespace Foam
             : public forces
         {
 
-            scalar windowNormalization_;
-            scalar windowPolynom_;
-            scalar windowPolynomAveraging_;
+            float windowNormalization_;
+            float windowPolynom_;
+            float windowPolynomAveraging_;
 
-            scalar windowEvaluation_;
-            scalar windowEvaluationAveraging_;
-            scalar conditionConvergence_;
-            scalar conditionAveraging_;
-            scalar maxStepConvergence_;
-            scalar maxStepAveraging_;
-            scalar forceStabilityFactor_;
-            scalar convergenceMinIter_;
-            scalar averagingMinIter_;
+            float windowEvaluation_;
+            float windowEvaluationAveraging_;
+            float conditionConvergence_;
+            float conditionAveraging_;
+            float maxStepConvergence_;
+            float maxStepAveraging_;
+            float forceStabilityFactor_;
+            float convergenceMinIter_;
+            float averagingMinIter_;
             bool convergenceFound_;
             bool simulationFinished_;
             int currentIteration_;
             int averagingStartedAt_;
             wordRes patches_;
             word rho_;
-            scalar rhoInf_;
+            float rhoInf_;
             vector CofR_;
-            scalar normalizedForcesMeanConverged_;
+            float normalizedForcesMeanConverged_;
             std::vector<double> forcesData_;
             std::vector<double> polyVector_;
             std::vector<double> polyVectorAveraging_;
@@ -233,7 +233,7 @@ namespace Foam
             // virtual double meanValue(std::vector<double>& forces_);
             // virtual double calculate_polynom_grad(std::vector<double> forces_);
 
-            virtual std::vector<double> divideForcesByScalar(double d);
+            virtual std::vector<double> divideForces(double d);
 
             virtual double meanValue(std::vector<double> normalizedForces);
 

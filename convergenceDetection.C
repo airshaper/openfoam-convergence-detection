@@ -50,26 +50,26 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
     const Time &runTime,
     const dictionary &dict)
     : forces(name, runTime, dict, false),
-      windowNormalization_(dict.lookupOrDefault<scalar>("windowNormalization", 0.5)),
-      windowPolynom_(dict.lookupOrDefault<scalar>("windowPolynom", 0.5)),
-      windowPolynomAveraging_(dict.lookupOrDefault<scalar>("windowPolynomAveraging", 0.99)),
-      windowEvaluation_(dict.lookupOrDefault<scalar>("windowEvaluation", 0.333)),
-      windowEvaluationAveraging_(dict.lookupOrDefault<scalar>("windowEvaluationAveraging", 0.333)),
-      conditionConvergence_(dict.lookupOrDefault<scalar>("conditionConvergence", 0.075)),
-      conditionAveraging_(dict.lookupOrDefault<scalar>("conditionAveraging", 0.025)),
-      maxStepConvergence_(dict.lookupOrDefault<scalar>("maxStepConvergence", 2500)),
-      maxStepAveraging_(dict.lookupOrDefault<scalar>("maxStepAveraging", 2500)),
-      forceStabilityFactor_(dict.lookupOrDefault<scalar>("forceStabilityFactor", 2)),
-      convergenceMinIter_(dict.lookupOrDefault<scalar>("convergenceMinIter", 200)),
-      averagingMinIter_(dict.lookupOrDefault<scalar>("averagingMinIter", 200)),
+      windowNormalization_(0.5),
+      windowPolynom_(0.5),
+      windowPolynomAveraging_(0.99),
+      windowEvaluation_(0.333),
+      windowEvaluationAveraging_(0.333),
+      conditionConvergence_(0.075),
+      conditionAveraging_(0.025),
+      maxStepConvergence_(2500),
+      maxStepAveraging_(2500),
+      forceStabilityFactor_(2),
+      convergenceMinIter_(200),
+      averagingMinIter_(200),
       convergenceFound_(false),
       simulationFinished_(false),
       currentIteration_(0),
       averagingStartedAt_(0),
-      patches_(dict.lookupOrDefault<wordRes>("patches", wordRes())),
-      rho_(dict.lookupOrDefault<word>("rho", "rhoInf")),
-      rhoInf_(dict.lookupOrDefault<scalar>("rhoInf", 1)),
-      CofR_(dict.lookupOrDefault<vector>("CofR", vector::zero)),
+      patches_(wordRes()),
+      rho_("rhoInf"),
+      rhoInf_(1),
+      CofR_(Zero),
       normalizedForcesMeanConverged_(0),
       forcesData_(0),
       polyVector_(0),
@@ -94,7 +94,6 @@ bool Foam::functionObjects::convergenceDetection::read(const dictionary &dict)
     dict.readIfPresent("windowPolynom", windowPolynom_);
     dict.readIfPresent("windowPolynomAveraging", windowPolynomAveraging_);
     dict.readIfPresent("windowEvaluation", windowEvaluation_);
-    dict.readIfPresent("windowEvaluationAveraging", windowEvaluationAveraging_);
     dict.readIfPresent("windowEvaluationAveraging", windowEvaluationAveraging_);
     dict.readIfPresent("conditionConvergence", conditionConvergence_);
     dict.readIfPresent("conditionAveraging", conditionAveraging_);
@@ -236,7 +235,7 @@ bool Foam::functionObjects::convergenceDetection::checkAveragingCriteria()
     return checkCriteriaForAveraging() < conditionAveraging_ &&
            checkCriteriaForAveraging() > 0.0 &&
            currentIteration_ > static_cast<int>(1.25 * averagingStartedAt_) &&
-           !simulationFinished_
+           !simulationFinished_;
 }
 
 void Foam::functionObjects::convergenceDetection::checkIfFinished()
@@ -309,18 +308,6 @@ void Foam::functionObjects::convergenceDetection::checkConvergence()
 
         turnOnAveraging();
     }
-
-    // if (currentIteration_ > maxStepConvergence_ && !convergenceFound_)
-    // {
-    //     convergenceFound_ = true;
-    //     Info << "###########" << endl;
-    //     Info << "Forced Convergence Found" << endl;
-    //     Info << "###########" << endl;
-
-    //     averagingStartedAt_ = currentIteration_;
-
-    //     turnOnAveraging();
-    // }
 }
 
 void Foam::functionObjects::convergenceDetection::turnOnAveraging()
@@ -336,7 +323,7 @@ void Foam::functionObjects::convergenceDetection::turnOnAveraging()
     averaging.regIOobject::write();
 }
 
-std::vector<double> Foam::functionObjects::convergenceDetection::divideForcesByScalar(double d)
+std::vector<double> Foam::functionObjects::convergenceDetection::divideForces(double d)
 {
     std::vector<double> dividedForces = {0};
     for (auto itr : forcesData_)
@@ -363,7 +350,7 @@ double Foam::functionObjects::convergenceDetection::calculatePolynomGradAveragin
     {
         double xMax = currentIteration_ / averagingStartedAt_;
 
-        std::vector<double> forcesNormalized = divideForcesByScalar(normalizedForcesMeanConverged_);
+        std::vector<double> forcesNormalized = divideForces(normalizedForcesMeanConverged_);
 
         double start = xMax / averagingSize;
         double end = xMax + xMax / averagingSize;
@@ -398,7 +385,7 @@ double Foam::functionObjects::convergenceDetection::calculatePolynomGrad()
 
     double forcesMean = meanValue(normalizedForces);
 
-    std::vector<double> forcesNormalized = divideForcesByScalar(forcesMean);
+    std::vector<double> forcesNormalized = divideForces(forcesMean);
 
     double start = 1.0f / currentIteration_;
     double end = 1.0f + 1.0f / currentIteration_;

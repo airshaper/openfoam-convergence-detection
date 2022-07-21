@@ -6,6 +6,7 @@
     "fvSolution": "OpenFOAM",
     "**/constant/g": "OpenFOAM",
     "**/0/*": "OpenFOAM",
+    "averaging": "OpenFOAM",
     "convergenceDetection.C": "cpp",
     "convergenceDetection.H": "cpp"
   }
