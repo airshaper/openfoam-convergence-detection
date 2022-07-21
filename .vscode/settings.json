@@ -1,0 +1,12 @@
+{
+  "files.associations": {
+    "*Dict": "OpenFOAM",
+    "*Properties": "OpenFOAM",
+    "fvSchemes": "OpenFOAM",
+    "fvSolution": "OpenFOAM",
+    "**/constant/g": "OpenFOAM",
+    "**/0/*": "OpenFOAM",
+    "convergenceDetection.C": "cpp",
+    "convergenceDetection.H": "cpp"
+  }
+}
