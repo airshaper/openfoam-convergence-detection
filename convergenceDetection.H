@@ -164,28 +164,28 @@ namespace Foam
             : public forces
         {
 
-            float windowNormalization_;
-            float windowPolynom_;
-            float windowPolynomAveraging_;
+            scalar windowNormalization_;
+            scalar windowPolynom_;
+            scalar windowPolynomAveraging_;
 
-            float windowEvaluation_;
-            float windowEvaluationAveraging_;
-            float conditionConvergence_;
-            float conditionAveraging_;
-            float maxStepConvergence_;
-            float maxStepAveraging_;
-            float forceStabilityFactor_;
-            float convergenceMinIter_;
-            float averagingMinIter_;
+            scalar windowEvaluation_;
+            scalar windowEvaluationAveraging_;
+            scalar conditionConvergence_;
+            scalar conditionAveraging_;
+            scalar maxStepConvergence_;
+            scalar maxStepAveraging_;
+            scalar forceStabilityFactor_;
+            scalar convergenceMinIter_;
+            scalar averagingMinIter_;
             bool convergenceFound_;
             bool simulationFinished_;
             int currentIteration_;
             int averagingStartedAt_;
             wordRes patches_;
             word rho_;
-            float rhoInf_;
+            scalar rhoInf_;
             vector CofR_;
-            float normalizedForcesMeanConverged_;
+            scalar normalizedForcesMeanConverged_;
             std::vector<double> forcesData_;
             std::vector<double> polyVector_;
             std::vector<double> polyVectorAveraging_;
