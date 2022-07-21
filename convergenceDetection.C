@@ -220,35 +220,45 @@ void Foam::functionObjects::convergenceDetection::writeDataFile(
     os << endl;
 }
 
+bool Foam::functionObjects::convergenceDetection::reachedMaxIterations()
+{
+    return currentIteration_ >= (maxStepConvergence_ + maxStepAveraging_);
+}
+
+bool Foam::functionObjects::convergenceDetection::minIterationsForAveraging()
+{
+    return currentIteration_ >= static_cast<int>(1.1 * averagingStartedAt_) &&
+           currentIteration_ >= static_cast<int>(averagingMinIter_ + averagingStartedAt_);
+}
+
+bool Foam::functionObjects::convergenceDetection::checkAveragingCriteria()
+{
+    return checkCriteriaForAveraging() < conditionAveraging_ &&
+           checkCriteriaForAveraging() > 0.0 &&
+           currentIteration_ > static_cast<int>(1.25 * averagingStartedAt_) &&
+           !simulationFinished_
+}
+
 void Foam::functionObjects::convergenceDetection::checkIfFinished()
 {
     double caclculatedPolynomGradAveraging = calculatePolynomGradAveraging();
 
     polyVectorAveraging_.push_back(caclculatedPolynomGradAveraging);
 
-    // Info << "checkCriteriaForAveraging(): " << checkCriteriaForAveraging() << " conditionAveraging_: " << conditionAveraging_ << endl;
-
-    if (checkCriteriaForAveraging() < conditionAveraging_ &&
-        checkCriteriaForAveraging() > 0.0 &&
-        currentIteration_ > static_cast<int>(1.25 * averagingStartedAt_) &&
-        !simulationFinished_)
+    if (checkAveragingCriteria() ||
+        reachedMaxIterations())
     {
-        if (currentIteration_ > static_cast<int>(1.1 * averagingStartedAt_) &&
-            currentIteration_ > static_cast<int>(averagingMinIter_ + averagingStartedAt_))
+        if (minIterationsForAveraging())
         {
             Info << "###########" << endl;
             Info << "Simulation should stop!!!!" << endl;
-            Info << "###########" << endl;
             Info << "Polynom Grad: " << checkCriteriaForAveraging() << endl;
             Info << "Condition for averaging: " << conditionAveraging_ << endl;
-            Info << "Condition is: " << (checkCriteriaForAveraging() < conditionAveraging_) << endl;
+            Info << "###########" << endl;
+
             time().stopAt(Time::saWriteNow);
             simulationFinished_ = true;
         }
-        // Info << "###########" << endl;
-        // Info << "Simulation should stop!!!!" << endl;
-        // Info << "###########" << endl;
-        // OFstream os(time().globalPath() + "/FINISHED");
     }
 }
 

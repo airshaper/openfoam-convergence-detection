@@ -245,6 +245,9 @@ namespace Foam
             virtual void checkConvergence();
             virtual void checkIfForcesExploded();
             virtual void createDataFile();
+            virtual bool reachedMaxIterations();
+            virtual bool minIterationsForAveraging();
+            virtual bool checkAveragingCriteria();
             virtual void writeDataFileHeader(const word &header, const word &tabbedName, OFstream &os) const;
             virtual void writeDataFile(OFstream &os, double &value) const;
             virtual std::vector<double> polyfit(const std::vector<double> x,
