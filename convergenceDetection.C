@@ -277,9 +277,12 @@ void Foam::functionObjects::convergenceDetection::checkIfForcesExploded()
 
         if (lastIterationForces < test1 or lastIterationForces > test2)
         {
-            FatalErrorInFunction
-                << "Forces Exploded, mean force value converged: " << lastIterationForces << nl
-                << abort(FatalError);
+            if (Pstream::master())
+            {
+                FatalErrorInFunction
+                    << "Forces Exploded, mean force value converged: " << lastIterationForces << nl
+                    << exit(FatalError);
+            }
         }
     }
 }
