@@ -161,7 +161,10 @@ bool Foam::functionObjects::convergenceDetection::write()
 
         createDataFile();
         writeDataFile(totalForceFilePtr_(), forcesData_.back());
-        writeDataFile(polynomGradFilePtr(), polyVector_.back());
+        if (currentIteration_ >= 5)
+        {
+            writeDataFile(polynomGradFilePtr(), polyVector_.back());
+        }
         if (convergenceFound_)
         {
             writeDataFile(polynomGradAveragedFilePtr(), polyVectorAveraging_.back());
