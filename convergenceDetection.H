@@ -256,7 +256,7 @@ namespace Foam
                                                 std::vector<double> coeffs);
             virtual std::vector<double> arange(double start, double stop, double step);
 
-            virtual void turnOnAveraging();
+            virtual void toggleAveraging(bool toggle);
         };
 
         // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //

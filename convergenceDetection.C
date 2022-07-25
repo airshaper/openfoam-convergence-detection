@@ -256,6 +256,7 @@ void Foam::functionObjects::convergenceDetection::checkIfFinished()
             Info << "###########" << endl;
 
             time().stopAt(Time::saWriteNow);
+            toggleAveraging(false);
             simulationFinished_ = true;
         }
     }
@@ -309,11 +310,11 @@ void Foam::functionObjects::convergenceDetection::checkConvergence()
         OFstream os(time().globalPath() + "/averaging");
         os << averagingStartedAt_ << endl;
 
-        turnOnAveraging();
+        toggleAveraging(true);
     }
 }
 
-void Foam::functionObjects::convergenceDetection::turnOnAveraging()
+void Foam::functionObjects::convergenceDetection::toggleAveraging(bool toggle)
 {
     IOdictionary averaging(IOobject(
         "averaging",
@@ -321,8 +322,8 @@ void Foam::functionObjects::convergenceDetection::turnOnAveraging()
         obr_,
         IOobject::MUST_READ_IF_MODIFIED,
         IOobject::AUTO_WRITE));
-    averaging.subDict("fieldAverage1").set("timeStart", currentIteration_);
-    averaging.subDict("fieldAverage1").set("enabled", true);
+    averaging.subDict("fieldAverage1").set("timeStart", toggle ? currentIteration_ : 0);
+    averaging.subDict("fieldAverage1").set("enabled", toggle);
     averaging.regIOobject::write();
 }
 
