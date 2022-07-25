@@ -22,7 +22,7 @@ convergenceDetection1
     patches         ( #CHANGEME# ); 
     rho             rhoInf;
     log             false;
-    rhoInf          1;
+    rhoInf          1.225; // for water 1000
     CofR            ( 0 0 0 );
     // end of forces  - required
 
