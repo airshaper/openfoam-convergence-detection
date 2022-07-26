@@ -291,12 +291,6 @@ void Foam::functionObjects::convergenceDetection::checkIfFinished()
 
 void Foam::functionObjects::convergenceDetection::checkIfForcesExploded()
 {
-    int normalizationForcesWindow = static_cast<int>(currentIteration_ * windowNormalization_);
-
-    std::vector<double> normalizedForces(forcesData_.end() - normalizationForcesWindow, forcesData_.end());
-
-    normalizedForcesMeanConverged_ = meanValue(normalizedForces);
-
     if (normalizedForcesMeanConverged_ > 0 && convergenceFound_)
     {
         double test1 = normalizedForcesMeanConverged_ / forceStabilityFactor_;
@@ -333,6 +327,12 @@ void Foam::functionObjects::convergenceDetection::checkConvergence()
         Info << "Condition is: " << (checkCriteriaForConvergence() < conditionConvergence_) << endl;
 
         averagingStartedAt_ = currentIteration_;
+
+        int normalizationForcesWindow = static_cast<int>(currentIteration_ * windowNormalization_);
+
+        std::vector<double> normalizedForces(forcesData_.end() - normalizationForcesWindow, forcesData_.end());
+
+        normalizedForcesMeanConverged_ = meanValue(normalizedForces);
 
         if (Pstream::master())
 
