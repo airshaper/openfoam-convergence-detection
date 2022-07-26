@@ -395,7 +395,9 @@ double Foam::functionObjects::convergenceDetection::calculatePolynomGradAveragin
     // allow some data to come in
     if (averagingSize >= 5)
     {
-        double xMax = currentIteration_ / averagingStartedAt_;
+        double xMax = static_cast<double>(currentIteration_) / static_cast<double>(averagingStartedAt_);
+
+        forcesNormalizedAveraging_ = divideForces(normalizedForcesMeanConverged_);
 
         double start = 1 + (xMax / averagingSize);
         double end = xMax + xMax / averagingSize;
@@ -404,8 +406,6 @@ double Foam::functionObjects::convergenceDetection::calculatePolynomGradAveragin
         std::vector<double> xAxisGeneral = arange(start, end, step);
 
         int windowForcesPolynom = static_cast<int>(xAxisGeneral.size() * windowPolynomAveraging_);
-
-        forcesNormalizedAveraging_ = divideForces(normalizedForcesMeanConverged_);
 
         std::vector<double> polynomForces(forcesNormalizedAveraging_.end() - windowForcesPolynom, forcesNormalizedAveraging_.end());
 
