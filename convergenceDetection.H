@@ -192,14 +192,14 @@ namespace Foam
             std::vector<double> forcesNormalized_;
             std::vector<double> forcesNormalizedAveraging_;
             autoPtr<OFstream> totalForceFilePtr_;
-            autoPtr<OFstream> polynomGradFilePtr;
-            autoPtr<OFstream> polynomGradAveragedFilePtr;
-            autoPtr<OFstream> forcesNormalizedFilePtr;
-            autoPtr<OFstream> forcesNormalizedAveragingFilePtr
+            autoPtr<OFstream> polynomGradFilePtr_;
+            autoPtr<OFstream> polynomGradAveragedFilePtr_;
+            autoPtr<OFstream> forcesNormalizedFilePtr_;
+            autoPtr<OFstream> forcesNormalizedAveragingFilePtr_;
 
-                public :
-                //- Runtime type information
-                TypeName("convergenceDetection");
+        public:
+            //- Runtime type information
+            TypeName("convergenceDetection");
 
             // Constructors
 

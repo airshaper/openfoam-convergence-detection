@@ -77,10 +77,10 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
       forcesNormalized_(),
       forcesNormalizedAveraging_(),
       totalForceFilePtr_(nullptr),
-      polynomGradFilePtr(nullptr),
-      polynomGradAveragedFilePtr(nullptr),
-      forcesNormalizedFilePtr(nullptr),
-      forcesNormalizedAveragingFilePtr(nullptr)
+      polynomGradFilePtr_(nullptr),
+      polynomGradAveragedFilePtr_(nullptr),
+      forcesNormalizedFilePtr_(nullptr),
+      forcesNormalizedAveragingFilePtr_(nullptr)
 
 // graphs to store
 //  forces
@@ -174,11 +174,11 @@ bool Foam::functionObjects::convergenceDetection::write()
         writeDataFile(totalForceFilePtr_(), forcesData_.back());
         if (currentIteration_ >= 5)
         {
-            writeDataFile(polynomGradFilePtr(), polyVector_.back());
+            writeDataFile(polynomGradFilePtr_(), polyVector_.back());
         }
         if (convergenceFound_)
         {
-            writeDataFile(polynomGradAveragedFilePtr(), polyVectorAveraging_.back());
+            writeDataFile(polynomGradAveragedFilePtr_(), polyVectorAveraging_.back());
         }
         forces::write();
     }
@@ -195,16 +195,16 @@ void Foam::functionObjects::convergenceDetection::createDataFile()
         writeDataFileHeader("totalForce", "total (x,y,z)", totalForceFilePtr_());
     }
 
-    if (!polynomGradFilePtr.valid())
+    if (!polynomGradFilePtr_.valid())
     {
-        polynomGradFilePtr = createFile("polynomGrad");
-        writeDataFileHeader("polynomGrad", "polynomGrad", polynomGradFilePtr());
+        polynomGradFilePtr_ = createFile("polynomGrad");
+        writeDataFileHeader("polynomGrad", "polynomGrad", polynomGradFilePtr_());
     }
 
-    if (!polynomGradAveragedFilePtr.valid())
+    if (!polynomGradAveragedFilePtr_.valid())
     {
-        polynomGradAveragedFilePtr = createFile("polynomGradAveraged");
-        writeDataFileHeader("polynomGradAveraged", "polynomGradAveraged", polynomGradAveragedFilePtr());
+        polynomGradAveragedFilePtr_ = createFile("polynomGradAveraged");
+        writeDataFileHeader("polynomGradAveraged", "polynomGradAveraged", polynomGradAveragedFilePtr_());
     }
 }
 
@@ -267,12 +267,20 @@ void Foam::functionObjects::convergenceDetection::checkIfFinished()
             Info << "Condition for averaging: " << conditionAveraging_ << endl;
             Info << "###########" << endl;
 
-            if (!forcesNormalizedAveragingFilePtr.valid())
-            {
-                forcesNormalizedAveragingFilePtr = createFile("forcesNormalizedAveraging");
-                writeDataFileHeader("forcesNormalizedAveraging", "forcesNormalizedAveraging", forcesNormalizedAveragingFilePtr());
-                writeDataFile(forcesNormalizedAveragingFilePtr(), forcesNormalizedAveraging_);
-            }
+            if (Pstream::master())
+                if (!forcesNormalizedAveragingFilePtr_.valid())
+                {
+                    forcesNormalizedAveragingFilePtr_ = createFile("forcesNormalizedAveraging");
+                    writeDataFileHeader("forcesNormalizedAveraging", "forcesNormalizedAveraging", forcesNormalizedAveragingFilePtr_());
+                    int i = 0;
+                    for (auto itr : forcesNormalizedAveraging_)
+                    {
+                        writeValue(forcesNormalizedAveragingFilePtr_(), i);
+                        writeValue(forcesNormalizedAveragingFilePtr_(), itr);
+                        forcesNormalizedAveragingFilePtr_() << endl;
+                        ++i;
+                    }
+                }
 
             time().stopAt(Time::saWriteNow);
             toggleAveraging(false);
@@ -326,12 +334,21 @@ void Foam::functionObjects::convergenceDetection::checkConvergence()
 
         averagingStartedAt_ = currentIteration_;
 
-        if (!forcesNormalizedFilePtr.valid())
-        {
-            forcesNormalizedFilePtr = createFile("forcesNormalized");
-            writeDataFileHeader("forcesNormalized", "forcesNormalized", forcesNormalizedFilePtr());
-            writeDataFile(forcesNormalizedFilePtr(), forcesNormalized_);
-        }
+        if (Pstream::master())
+
+            if (!forcesNormalizedFilePtr_.valid())
+            {
+                forcesNormalizedFilePtr_ = createFile("forcesNormalized");
+                writeDataFileHeader("forcesNormalized", "forcesNormalized", forcesNormalizedFilePtr_());
+                int i = 0;
+                for (auto itr : forcesNormalized_)
+                {
+                    writeValue(forcesNormalizedFilePtr_(), i);
+                    writeValue(forcesNormalizedFilePtr_(), itr);
+                    forcesNormalizedFilePtr_() << endl;
+                    ++i;
+                }
+            }
 
         OFstream os(time().globalPath() + "/averaging");
         os << averagingStartedAt_ << endl;
@@ -416,7 +433,7 @@ double Foam::functionObjects::convergenceDetection::calculatePolynomGrad()
 
     double forcesMean = meanValue(normalizedForces);
 
-    forcesNormalizedAveraging_ = divideForces(forcesMean);
+    forcesNormalized_ = divideForces(forcesMean);
 
     // take this into account for transient
     double start = 1.0f / currentIteration_;
@@ -427,7 +444,7 @@ double Foam::functionObjects::convergenceDetection::calculatePolynomGrad()
 
     std::vector<double> xAxisGeneral = arange(start, end, step);
 
-    std::vector<double> polynomForces(forcesNormalizedAveraging_.end() - windowForcesPolynom, forcesNormalizedAveraging_.end());
+    std::vector<double> polynomForces(forcesNormalized_.end() - windowForcesPolynom, forcesNormalized_.end());
 
     std::vector<double> xAxisPolynom(xAxisGeneral.end() - windowForcesPolynom, xAxisGeneral.end());
 
