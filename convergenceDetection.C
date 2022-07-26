@@ -399,13 +399,13 @@ double Foam::functionObjects::convergenceDetection::calculatePolynomGradAveragin
 
         forcesNormalizedAveraging_ = divideForces(normalizedForcesMeanConverged_);
 
-        double start = xMax / averagingSize;
+        double start = 1 + (xMax / averagingSize);
         double end = xMax + xMax / averagingSize;
         double step = xMax / averagingSize;
 
         std::vector<double> xAxisGeneral = arange(start, end, step);
 
-        int windowForcesPolynom = xAxisGeneral.size() * windowPolynomAveraging_;
+        int windowForcesPolynom = static_cast<int>(xAxisGeneral.size() * windowPolynomAveraging_);
 
         std::vector<double> polynomForces(forcesNormalizedAveraging_.end() - windowForcesPolynom, forcesNormalizedAveraging_.end());
 
