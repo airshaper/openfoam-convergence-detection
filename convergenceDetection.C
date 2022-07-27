@@ -78,17 +78,7 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
       forcesNormalizedAveraging_(),
       totalForceFilePtr_(nullptr),
       polynomGradFilePtr_(nullptr),
-      polynomGradAveragedFilePtr_(nullptr),
-      forcesNormalizedFilePtr_(nullptr),
-      forcesNormalizedAveragingFilePtr_(nullptr)
-
-// graphs to store
-//  forces
-//  totalForce
-//  forcesNormalized - not stored
-//  polyVector
-//  polyVector averaging
-// forcesNormalized for averaging - not stored
+      polynomGradAveragedFilePtr_(nullptr)
 
 {
     read(dict);
@@ -133,9 +123,7 @@ bool Foam::functionObjects::convergenceDetection::execute()
     // wait for a few iterations before starting polynom grad calculation
     if (currentIteration_ >= 5)
     {
-
         double caclculatedPolynomGrad = calculatePolynomGrad();
-
         polyVector_.push_back(caclculatedPolynomGrad);
     }
 
@@ -144,7 +132,6 @@ bool Foam::functionObjects::convergenceDetection::execute()
     {
         if (!convergenceFound_)
         {
-            Info << "Checking after " << convergenceMinIter_ << " iterations, no need to calculate before that time" << endl;
             checkConvergence();
         }
         // Start to check at averagingMinIter to avoid calculate each iteration
@@ -152,6 +139,10 @@ bool Foam::functionObjects::convergenceDetection::execute()
             !simulationFinished_ &&
             convergenceFound_)
         {
+            if (checkCriteriaForConvergence() >= conditionConvergence_)
+            {
+                stopAveraging();
+            }
             checkIfForcesExploded();
             checkIfFinished();
         }
@@ -267,26 +258,23 @@ void Foam::functionObjects::convergenceDetection::checkIfFinished()
             Info << "Condition for averaging: " << conditionAveraging_ << endl;
             Info << "###########" << endl;
 
-            if (Pstream::master())
-                if (!forcesNormalizedAveragingFilePtr_.valid())
-                {
-                    forcesNormalizedAveragingFilePtr_ = createFile("forcesNormalizedAveraging");
-                    writeDataFileHeader("forcesNormalizedAveraging", "forcesNormalizedAveraging", forcesNormalizedAveragingFilePtr_());
-                    int i = 0;
-                    for (auto itr : forcesNormalizedAveraging_)
-                    {
-                        writeValue(forcesNormalizedAveragingFilePtr_(), i);
-                        writeValue(forcesNormalizedAveragingFilePtr_(), itr);
-                        forcesNormalizedAveragingFilePtr_() << endl;
-                        ++i;
-                    }
-                }
-
             time().stopAt(Time::saWriteNow);
             toggleAveraging(false);
             simulationFinished_ = true;
         }
     }
+}
+
+void Foam::functionObjects::convergenceDetection::stopAveraging()
+{
+    convergenceFound_ = false;
+    toggleAveraging(false);
+    polyVectorAveraging_.clear();
+    if (exists(time().globalPath() + "/averaging"))
+    {
+        rm(time().globalPath() + "/averaging");
+    }
+    Info << "Out of convergence" << endl;
 }
 
 void Foam::functionObjects::convergenceDetection::checkIfForcesExploded()
@@ -333,22 +321,6 @@ void Foam::functionObjects::convergenceDetection::checkConvergence()
         std::vector<double> normalizedForces(forcesData_.end() - normalizationForcesWindow, forcesData_.end());
 
         normalizedForcesMeanConverged_ = meanValue(normalizedForces);
-
-        if (Pstream::master())
-
-            if (!forcesNormalizedFilePtr_.valid())
-            {
-                forcesNormalizedFilePtr_ = createFile("forcesNormalized");
-                writeDataFileHeader("forcesNormalized", "forcesNormalized", forcesNormalizedFilePtr_());
-                int i = 0;
-                for (auto itr : forcesNormalized_)
-                {
-                    writeValue(forcesNormalizedFilePtr_(), i);
-                    writeValue(forcesNormalizedFilePtr_(), itr);
-                    forcesNormalizedFilePtr_() << endl;
-                    ++i;
-                }
-            }
 
         OFstream os(time().globalPath() + "/averaging");
         os << averagingStartedAt_ << endl;
@@ -418,7 +390,7 @@ double Foam::functionObjects::convergenceDetection::calculatePolynomGradAveragin
 
         std::vector<double> polynom = polyfit(xAxisPolynom, polynomForces, 1, {0});
 
-        return static_cast<double>(fabs(polynom[1]));
+        return static_cast<double>(polynom[1]);
     }
     return 0.0;
 }
@@ -453,7 +425,7 @@ double Foam::functionObjects::convergenceDetection::calculatePolynomGrad()
 
     std::vector<double> polynom = polyfit(xAxisPolynom, polynomForces, 1, {0});
 
-    return static_cast<double>(fabs(polynom[1]));
+    return static_cast<double>(polynom[1]);
 }
 
 // DRY
@@ -464,9 +436,11 @@ double Foam::functionObjects::convergenceDetection::checkCriteriaForConvergence(
 
     if (vectorForEvaluation.size() > 0)
     {
-        return *std::max_element(vectorForEvaluation.begin(), vectorForEvaluation.end());
+        double maxValue = *std::max_element(vectorForEvaluation.begin(), vectorForEvaluation.end());
+        double minValue = *std::min_element(vectorForEvaluation.begin(), vectorForEvaluation.end());
+        return max(maxValue, fabs(minValue));
     }
-    return 0.0;
+    return 1.0;
 }
 
 // DRY
@@ -479,9 +453,11 @@ double Foam::functionObjects::convergenceDetection::checkCriteriaForAveraging()
 
     if (vectorForEvaluation.size() > 0)
     {
-        return *std::max_element(vectorForEvaluation.begin(), vectorForEvaluation.end());
+        double maxValue = *std::max_element(vectorForEvaluation.begin(), vectorForEvaluation.end());
+        double minValue = *std::min_element(vectorForEvaluation.begin(), vectorForEvaluation.end());
+        return max(maxValue, fabs(minValue));
     }
-    return 0.0;
+    return 1.0;
 }
 
 std::vector<double> Foam::functionObjects::convergenceDetection::arange(double start, double stop, double step)

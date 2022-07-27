@@ -194,8 +194,6 @@ namespace Foam
             autoPtr<OFstream> totalForceFilePtr_;
             autoPtr<OFstream> polynomGradFilePtr_;
             autoPtr<OFstream> polynomGradAveragedFilePtr_;
-            autoPtr<OFstream> forcesNormalizedFilePtr_;
-            autoPtr<OFstream> forcesNormalizedAveragingFilePtr_;
 
         public:
             //- Runtime type information
@@ -245,6 +243,7 @@ namespace Foam
             virtual double calculatePolynomGradAveraging();
             virtual double checkCriteriaForConvergence();
             virtual double checkCriteriaForAveraging();
+            virtual void stopAveraging();
             virtual void checkIfFinished();
             virtual void checkConvergence();
             virtual void checkIfForcesExploded();
