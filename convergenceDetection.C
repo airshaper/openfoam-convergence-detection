@@ -274,7 +274,7 @@ void Foam::functionObjects::convergenceDetection::stopAveraging()
     {
         rm(time().globalPath() + "/averaging");
     }
-    Info << "Out of convergence" << endl;
+    Info << "## Getting out of averaging ###" << endl;
 }
 
 void Foam::functionObjects::convergenceDetection::checkIfForcesExploded()
