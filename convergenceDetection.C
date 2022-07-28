@@ -309,7 +309,7 @@ void Foam::functionObjects::convergenceDetection::checkConvergence()
         convergenceFound_ = true;
         if (currentIteration_ >= maxStepConvergence_)
         {
-            forcedConvergence_ = true
+            forcedConvergence_ = true;
         }
         word forcedConvergence = forcedConvergence_ ? "Forced " : "";
         Info << "#####################################" << endl;
