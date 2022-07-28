@@ -179,6 +179,7 @@ namespace Foam
             scalar averagingMinIter_;
             bool convergenceFound_;
             bool simulationFinished_;
+            bool forcedConvergence_;
             int currentIteration_;
             int averagingStartedAt_;
             wordRes patches_;

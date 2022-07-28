@@ -64,6 +64,7 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
       averagingMinIter_(200),
       convergenceFound_(false),
       simulationFinished_(false),
+      forcedConvergence_(false),
       currentIteration_(0),
       averagingStartedAt_(0),
       patches_(wordRes()),
@@ -139,7 +140,7 @@ bool Foam::functionObjects::convergenceDetection::execute()
             !simulationFinished_ &&
             convergenceFound_)
         {
-            if (checkCriteriaForConvergence() >= conditionConvergence_)
+            if (checkCriteriaForConvergence() >= conditionConvergence_ && !forcedConvergence_)
             {
                 stopAveraging();
             }
@@ -300,13 +301,17 @@ void Foam::functionObjects::convergenceDetection::checkIfForcesExploded()
 void Foam::functionObjects::convergenceDetection::checkConvergence()
 {
     if ((checkCriteriaForConvergence() < conditionConvergence_ &&
-         currentIteration_ > convergenceMinIter_ &&
+         currentIteration_ >= convergenceMinIter_ &&
          !convergenceFound_) ||
-        (currentIteration_ > maxStepConvergence_ &&
+        (currentIteration_ >= maxStepConvergence_ &&
          !convergenceFound_))
     {
         convergenceFound_ = true;
-        word forcedConvergence = currentIteration_ > maxStepConvergence_ ? "Forced " : "";
+        if (currentIteration_ >= maxStepConvergence_)
+        {
+            forcedConvergence_ = true
+        }
+        word forcedConvergence = forcedConvergence_ ? "Forced " : "";
         Info << "#####################################" << endl;
         Info << forcedConvergence << "Convergence Found" << endl;
         Info << "#####################################" << endl;
