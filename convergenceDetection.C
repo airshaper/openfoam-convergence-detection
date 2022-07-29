@@ -84,6 +84,17 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
 {
     read(dict);
     setCoordinateSystem(dict);
+
+    if (!exists(time().caseSystem() + "/averaging"))
+    {
+        if (Pstream::master())
+        {
+            FatalError
+                << "Averaging file does not exists, please create averaging file in system/averaging and include it in controlDict (#include \"averaging\")" << nl
+                << "https://www.openfoam.com/documentation/guides/latest/doc/guide-fos-field-fieldAverage.html" << nl
+                << abort(FatalError);
+        }
+    }
 }
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
@@ -290,7 +301,7 @@ void Foam::functionObjects::convergenceDetection::checkIfForcesExploded()
         {
             if (Pstream::master())
             {
-                FatalErrorInFunction
+                FatalError
                     << "Forces Exploded, mean force value converged: " << lastIterationForces << nl
                     << exit(FatalError);
             }
