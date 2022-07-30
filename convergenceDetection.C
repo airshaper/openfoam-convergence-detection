@@ -106,6 +106,7 @@ bool Foam::functionObjects::convergenceDetection::read(const dictionary &dict)
     dict.readIfPresent("convergenceMinIter", convergenceMinIter_);
     dict.readIfPresent("averagingMinIter", averagingMinIter_);
 
+    /*
     if (!exists(time().caseSystem() + "/averaging"))
     {
         if (Pstream::master())
@@ -118,6 +119,7 @@ bool Foam::functionObjects::convergenceDetection::read(const dictionary &dict)
             return false;
         }
     }
+    */
 
     return true;
 }
