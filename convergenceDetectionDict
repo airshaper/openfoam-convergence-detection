@@ -11,8 +11,8 @@ convergenceDetection1
     // windowEvaluationAveraging 0.333;
     // conditionConvergence 0.075;
     // conditionAveraging 0.025;
-    // maxStepConvergence 2500;
-    // maxStepAveraging 2500;
+    // maxStepConvergence 4000;
+    // maxStepAveraging 2000;
     // forceStabilityFactor 2;
     // convergenceMinIter 200;
     // averagingMinIter 200;
