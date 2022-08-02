@@ -436,11 +436,11 @@ double Foam::functionObjects::convergenceDetection::calculateGradient()
 
     std::vector<double> xAxisNormalized = arange(start, end, step);
 
-    std::vector<double> windowForcesForGradient§(forcesNormalized_.end() - windowForcesGradient, forcesNormalized_.end());
+    std::vector<double> windowForcesForGradient(forcesNormalized_.end() - windowForcesGradient, forcesNormalized_.end());
 
     std::vector<double> windowXAxisForGradient(xAxisNormalized.end() - windowForcesGradient, xAxisNormalized.end());
 
-    std::vector<double> gradient = polyfit(windowXAxisForGradient, windowForcesForGradient§, 1, {0});
+    std::vector<double> gradient = polyfit(windowXAxisForGradient, windowForcesForGradient, 1, {0});
 
     return static_cast<double>(gradient[1]);
 }
