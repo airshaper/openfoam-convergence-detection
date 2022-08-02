@@ -165,18 +165,18 @@ namespace Foam
         {
 
             scalar windowNormalization_;
-            scalar windowPolynom_;
-            scalar windowPolynomAveraging_;
+            scalar windowGradient_;
+            scalar windowGradientAveraging_;
 
             scalar windowEvaluation_;
             scalar windowEvaluationAveraging_;
-            scalar conditionConvergence_;
-            scalar conditionAveraging_;
-            scalar maxStepConvergence_;
-            scalar maxStepAveraging_;
+            scalar thresholdConvergence_;
+            scalar thresholdAveraging_;
+            scalar iterationMaxConvergence_;
+            scalar iterationMaxAveraging_;
             scalar forceStabilityFactor_;
-            scalar convergenceMinIter_;
-            scalar averagingMinIter_;
+            scalar iterationMinConvergence_;
+            scalar iterationMinAveraging_;
             bool convergenceFound_;
             bool simulationFinished_;
             bool forcedConvergence_;
@@ -188,13 +188,13 @@ namespace Foam
             vector CofR_;
             scalar normalizedForcesMeanConverged_;
             std::vector<double> forcesData_;
-            std::vector<double> polyVector_;
-            std::vector<double> polyVectorAveraging_;
+            std::vector<double> gradArray_;
+            std::vector<double> gradArrayAveraging_;
             std::vector<double> forcesNormalized_;
             std::vector<double> forcesNormalizedAveraging_;
             autoPtr<OFstream> totalForceFilePtr_;
-            autoPtr<OFstream> polynomGradFilePtr_;
-            autoPtr<OFstream> polynomGradAveragedFilePtr_;
+            autoPtr<OFstream> gradientFilePtr_;
+            autoPtr<OFstream> gradientAveragedFilePtr_;
 
         public:
             //- Runtime type information
@@ -234,24 +234,22 @@ namespace Foam
 
         protected:
             // virtual double meanValue(std::vector<double>& forces_);
-            // virtual double calculate_polynom_grad(std::vector<double> forces_);
+            // virtual double calculate_Gradient_grad(std::vector<double> forces_);
 
             virtual std::vector<double> divideForces(double d);
-
             virtual double meanValue(std::vector<double> normalizedForces);
-
-            virtual double calculatePolynomGrad();
-            virtual double calculatePolynomGradAveraging();
-            virtual double checkCriteriaForConvergence();
-            virtual double checkCriteriaForAveraging();
+            virtual double calculateGradient();
+            virtual double calculateGradientAveraging();
+            virtual double convergenceMaxGradient();
+            virtual double averagingMaxGradient();
             virtual void stopAveraging();
-            virtual void checkIfFinished();
-            virtual void checkConvergence();
-            virtual void checkIfForcesExploded();
+            virtual void isFinished();
+            virtual void convergenceEvaluation();
+            virtual void isExploded();
             virtual void createDataFile();
             virtual bool reachedMaxIterations();
             virtual bool minIterationsForAveraging();
-            virtual bool checkAveragingCriteria();
+            virtual bool isAveraged();
             virtual void writeDataFileHeader(const word &header, const word &tabbedName, OFstream &os) const;
             virtual void writeDataFile(OFstream &os, double &value) const;
             virtual std::vector<double> polyfit(const std::vector<double> x,

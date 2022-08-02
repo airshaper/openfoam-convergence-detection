@@ -5,17 +5,17 @@ convergenceDetection1
 
     // default settings
     // windowNormalization 0.5;
-    // windowPolynom 0.5;
-    // windowPolynomAveraging 0.99;
+    // windowGradient 0.5;
+    // windowGradientAveraging 0.99;
     // windowEvaluation 0.333;
     // windowEvaluationAveraging 0.333;
-    // conditionConvergence 0.075;
-    // conditionAveraging 0.025;
-    // maxStepConvergence 4000;
-    // maxStepAveraging 2000;
+    // thresholdConvergence 0.075;
+    // thresholdAveraging 0.025;
+    // iterationMaxConvergence 4000;
+    // iterationMaxAveraging 2000;
+    // iterationMinConvergence 200;
+    // iterationMinAveraging 200;
     // forceStabilityFactor 2;
-    // convergenceMinIter 200;
-    // averagingMinIter 200;
     
     // forces - required
     // modify according to your case

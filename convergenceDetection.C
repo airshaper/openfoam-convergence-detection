@@ -51,17 +51,17 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
     const dictionary &dict)
     : forces(name, runTime, dict, false),
       windowNormalization_(0.5),
-      windowPolynom_(0.5),
-      windowPolynomAveraging_(0.99),
+      windowGradient_(0.5),
+      windowGradientAveraging_(0.99),
       windowEvaluation_(0.333),
       windowEvaluationAveraging_(0.333),
-      conditionConvergence_(0.075),
-      conditionAveraging_(0.025),
-      maxStepConvergence_(4000),
-      maxStepAveraging_(2000),
+      thresholdConvergence_(0.075),
+      thresholdAveraging_(0.025),
+      iterationMaxConvergence_(4000),
+      iterationMaxAveraging_(2000),
       forceStabilityFactor_(2),
-      convergenceMinIter_(200),
-      averagingMinIter_(200),
+      iterationMinConvergence_(200),
+      iterationMinAveraging_(200),
       convergenceFound_(false),
       simulationFinished_(false),
       forcedConvergence_(false),
@@ -73,13 +73,13 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
       CofR_(Zero),
       normalizedForcesMeanConverged_(0),
       forcesData_(0),
-      polyVector_(0),
-      polyVectorAveraging_(),
+      gradArray_(0),
+      gradArrayAveraging_(),
       forcesNormalized_(),
       forcesNormalizedAveraging_(),
       totalForceFilePtr_(nullptr),
-      polynomGradFilePtr_(nullptr),
-      polynomGradAveragedFilePtr_(nullptr)
+      gradientFilePtr_(nullptr),
+      gradientAveragedFilePtr_(nullptr)
 
 {
     read(dict);
@@ -94,17 +94,17 @@ bool Foam::functionObjects::convergenceDetection::read(const dictionary &dict)
     forces::read(dict);
 
     dict.readIfPresent("windowNormalization", windowNormalization_);
-    dict.readIfPresent("windowPolynom", windowPolynom_);
-    dict.readIfPresent("windowPolynomAveraging", windowPolynomAveraging_);
+    dict.readIfPresent("windowGradient", windowGradient_);
+    dict.readIfPresent("windowGradientAveraging", windowGradientAveraging_);
     dict.readIfPresent("windowEvaluation", windowEvaluation_);
     dict.readIfPresent("windowEvaluationAveraging", windowEvaluationAveraging_);
-    dict.readIfPresent("conditionConvergence", conditionConvergence_);
-    dict.readIfPresent("conditionAveraging", conditionAveraging_);
-    dict.readIfPresent("maxStepConvergence", maxStepConvergence_);
-    dict.readIfPresent("maxStepAveraging", maxStepAveraging_);
+    dict.readIfPresent("thresholdConvergence", thresholdConvergence_);
+    dict.readIfPresent("thresholdAveraging", thresholdAveraging_);
+    dict.readIfPresent("iterationMaxConvergence", iterationMaxConvergence_);
+    dict.readIfPresent("iterationMaxAveraging", iterationMaxAveraging_);
     dict.readIfPresent("forceStabilityFactor", forceStabilityFactor_);
-    dict.readIfPresent("convergenceMinIter", convergenceMinIter_);
-    dict.readIfPresent("averagingMinIter", averagingMinIter_);
+    dict.readIfPresent("iterationMinConvergence", iterationMinConvergence_);
+    dict.readIfPresent("iterationMinAveraging", iterationMinAveraging_);
 
     /*
     if (!exists(time().caseSystem() + "/averaging"))
@@ -137,31 +137,33 @@ bool Foam::functionObjects::convergenceDetection::execute()
 
     currentIteration_ = time().value();
 
-    // wait for a few iterations before starting polynom grad calculation
+    // wait for a few iterations before starting gradient calculation
     if (currentIteration_ >= 5)
     {
-        double caclculatedPolynomGrad = calculatePolynomGrad();
-        polyVector_.push_back(caclculatedPolynomGrad);
+        double caclculatedGradient = calculateGradient();
+        gradArray_.push_back(caclculatedGradient);
     }
 
     // need few iterations before starting calculation
-    if (currentIteration_ >= convergenceMinIter_)
+    if (currentIteration_ >= iterationMinConvergence_)
     {
         if (!convergenceFound_)
         {
-            checkConvergence();
+            convergenceEvaluation();
         }
-        // Start to check at averagingMinIter to avoid calculate each iteration
-        if (currentIteration_ >= averagingMinIter_ &&
+        // Start to check at iterationMinAveraging to avoid calculate each iteration
+        if (currentIteration_ >= iterationMinAveraging_ &&
             !simulationFinished_ &&
             convergenceFound_)
         {
-            if (checkCriteriaForConvergence() >= conditionConvergence_ && !forcedConvergence_)
+            if (convergenceMaxGradient() >= thresholdConvergence_ && !forcedConvergence_)
             {
                 stopAveraging();
             }
-            checkIfForcesExploded();
-            checkIfFinished();
+            double caclculatedGradientAveraging = calculateGradientAveraging();
+            gradArrayAveraging_.push_back(caclculatedGradientAveraging);
+            isExploded();
+            isFinished();
         }
     }
 
@@ -182,11 +184,11 @@ bool Foam::functionObjects::convergenceDetection::write()
         writeDataFile(totalForceFilePtr_(), forcesData_.back());
         if (currentIteration_ >= 5)
         {
-            writeDataFile(polynomGradFilePtr_(), polyVector_.back());
+            writeDataFile(gradientFilePtr_(), gradArray_.back());
         }
         if (convergenceFound_)
         {
-            writeDataFile(polynomGradAveragedFilePtr_(), polyVectorAveraging_.back());
+            writeDataFile(gradientAveragedFilePtr_(), gradArrayAveraging_.back());
         }
         forces::write();
     }
@@ -203,16 +205,16 @@ void Foam::functionObjects::convergenceDetection::createDataFile()
         writeDataFileHeader("totalForce", "total (x,y,z)", totalForceFilePtr_());
     }
 
-    if (!polynomGradFilePtr_.valid())
+    if (!gradientFilePtr_.valid())
     {
-        polynomGradFilePtr_ = createFile("polynomGrad");
-        writeDataFileHeader("polynomGrad", "polynomGrad", polynomGradFilePtr_());
+        gradientFilePtr_ = createFile("gradient");
+        writeDataFileHeader("Gradient", "Gradient", gradientFilePtr_());
     }
 
-    if (!polynomGradAveragedFilePtr_.valid())
+    if (!gradientAveragedFilePtr_.valid())
     {
-        polynomGradAveragedFilePtr_ = createFile("polynomGradAveraged");
-        writeDataFileHeader("polynomGradAveraged", "polynomGradAveraged", polynomGradAveragedFilePtr_());
+        gradientAveragedFilePtr_ = createFile("gradientAveraged");
+        writeDataFileHeader("GradientAveraged", "GradientAveraged", gradientAveragedFilePtr_());
     }
 }
 
@@ -241,38 +243,35 @@ void Foam::functionObjects::convergenceDetection::writeDataFile(
 
 bool Foam::functionObjects::convergenceDetection::reachedMaxIterations()
 {
-    return currentIteration_ >= (maxStepConvergence_ + maxStepAveraging_);
+    return currentIteration_ >= (iterationMaxConvergence_ + iterationMaxAveraging_);
 }
 
 bool Foam::functionObjects::convergenceDetection::minIterationsForAveraging()
 {
     return currentIteration_ >= static_cast<int>(1.1 * averagingStartedAt_) &&
-           currentIteration_ >= static_cast<int>(averagingMinIter_ + averagingStartedAt_);
+           currentIteration_ >= static_cast<int>(iterationMinAveraging_ + averagingStartedAt_);
 }
 
-bool Foam::functionObjects::convergenceDetection::checkAveragingCriteria()
+bool Foam::functionObjects::convergenceDetection::isAveraged()
 {
-    return checkCriteriaForAveraging() < conditionAveraging_ &&
-           checkCriteriaForAveraging() > 0.0 &&
+    return averagingMaxGradient() < thresholdAveraging_ &&
+           averagingMaxGradient() > 0.0 &&
            currentIteration_ > static_cast<int>(1.25 * averagingStartedAt_) &&
            !simulationFinished_;
 }
 
-void Foam::functionObjects::convergenceDetection::checkIfFinished()
+void Foam::functionObjects::convergenceDetection::isFinished()
 {
-    double caclculatedPolynomGradAveraging = calculatePolynomGradAveraging();
 
-    polyVectorAveraging_.push_back(caclculatedPolynomGradAveraging);
-
-    if (checkAveragingCriteria() ||
+    if (isAveraged() ||
         reachedMaxIterations())
     {
         if (minIterationsForAveraging())
         {
             Info << "###########" << endl;
             Info << "Simulation should stop!!!!" << endl;
-            Info << "Polynom Grad: " << checkCriteriaForAveraging() << endl;
-            Info << "Condition for averaging: " << conditionAveraging_ << endl;
+            Info << "Gradient: " << averagingMaxGradient() << endl;
+            Info << "Condition for averaging: " << thresholdAveraging_ << endl;
             Info << "###########" << endl;
 
             time().stopAt(Time::saWriteNow);
@@ -286,7 +285,7 @@ void Foam::functionObjects::convergenceDetection::stopAveraging()
 {
     convergenceFound_ = false;
     toggleAveraging(false);
-    polyVectorAveraging_.clear();
+    gradArrayAveraging_.clear();
     if (exists(time().globalPath() + "/averaging"))
     {
         rm(time().globalPath() + "/averaging");
@@ -294,7 +293,7 @@ void Foam::functionObjects::convergenceDetection::stopAveraging()
     Info << "## Getting out of averaging ###" << endl;
 }
 
-void Foam::functionObjects::convergenceDetection::checkIfForcesExploded()
+void Foam::functionObjects::convergenceDetection::isExploded()
 {
     if (normalizedForcesMeanConverged_ > 0 && convergenceFound_)
     {
@@ -314,16 +313,16 @@ void Foam::functionObjects::convergenceDetection::checkIfForcesExploded()
     }
 }
 
-void Foam::functionObjects::convergenceDetection::checkConvergence()
+void Foam::functionObjects::convergenceDetection::convergenceEvaluation()
 {
-    if ((checkCriteriaForConvergence() < conditionConvergence_ &&
-         currentIteration_ >= convergenceMinIter_ &&
+    if ((convergenceMaxGradient() < thresholdConvergence_ &&
+         currentIteration_ >= iterationMinConvergence_ &&
          !convergenceFound_) ||
-        (currentIteration_ >= maxStepConvergence_ &&
+        (currentIteration_ >= iterationMaxConvergence_ &&
          !convergenceFound_))
     {
         convergenceFound_ = true;
-        if (currentIteration_ >= maxStepConvergence_)
+        if (currentIteration_ >= iterationMaxConvergence_)
         {
             forcedConvergence_ = true;
         }
@@ -331,15 +330,15 @@ void Foam::functionObjects::convergenceDetection::checkConvergence()
         Info << "#####################################" << endl;
         Info << forcedConvergence << "Convergence Found" << endl;
         Info << "#####################################" << endl;
-        Info << "Polynom Grad: " << checkCriteriaForConvergence() << endl;
-        Info << "Condition for convergence: " << conditionConvergence_ << endl;
-        Info << "Condition is: " << (checkCriteriaForConvergence() < conditionConvergence_) << endl;
+        Info << "Gradient: " << convergenceMaxGradient() << endl;
+        Info << "Condition for convergence: " << thresholdConvergence_ << endl;
+        Info << "Condition is: " << (convergenceMaxGradient() < thresholdConvergence_) << endl;
 
         averagingStartedAt_ = currentIteration_;
 
-        int normalizationForcesWindow = static_cast<int>(currentIteration_ * windowNormalization_);
+        int windowForcesNormalization = static_cast<int>(currentIteration_ * windowNormalization_);
 
-        std::vector<double> normalizedForces(forcesData_.end() - normalizationForcesWindow, forcesData_.end());
+        std::vector<double> normalizedForces(forcesData_.end() - windowForcesNormalization, forcesData_.end());
 
         normalizedForcesMeanConverged_ = meanValue(normalizedForces);
 
@@ -381,48 +380,48 @@ double Foam::functionObjects::convergenceDetection::meanValue(std::vector<double
     return sum / normalizedForces.size(); // for transient change this
 }
 
-double Foam::functionObjects::convergenceDetection::calculatePolynomGradAveraging()
+double Foam::functionObjects::convergenceDetection::calculateGradientAveraging()
 {
     int averagingSize = currentIteration_ - averagingStartedAt_;
 
     // allow some data to come in
     if (averagingSize >= 5)
     {
-        double xMax = static_cast<double>(currentIteration_) / static_cast<double>(averagingStartedAt_);
+        double maxIterationNormalized = static_cast<double>(currentIteration_) / static_cast<double>(averagingStartedAt_);
 
         forcesNormalizedAveraging_ = divideForces(normalizedForcesMeanConverged_);
 
-        double start = 1 + (xMax / averagingSize);
-        double end = xMax + xMax / averagingSize;
-        double step = (xMax - 1) / averagingSize;
+        double start = 1 + (maxIterationNormalized / averagingSize);
+        double end = maxIterationNormalized + maxIterationNormalized / averagingSize;
+        double step = (maxIterationNormalized - 1) / averagingSize;
 
-        std::vector<double> xAxisGeneral = arange(start, end, step);
+        std::vector<double> xAxisNormalized = arange(start, end, step);
 
-        int windowForcesPolynom = static_cast<int>(xAxisGeneral.size() * windowPolynomAveraging_);
+        int windowForcesNormalization = static_cast<int>(xAxisNormalized.size() * windowGradientAveraging_);
 
-        std::vector<double> polynomForces(forcesNormalizedAveraging_.end() - windowForcesPolynom, forcesNormalizedAveraging_.end());
+        std::vector<double> windowForcesForGradient(forcesNormalizedAveraging_.end() - windowForcesNormalization, forcesNormalizedAveraging_.end());
 
-        std::vector<double> xAxisPolynom(xAxisGeneral.end() - windowForcesPolynom, xAxisGeneral.end());
+        std::vector<double> windowXAxisForGradient(xAxisNormalized.end() - windowForcesNormalization, xAxisNormalized.end());
 
-        if (xAxisPolynom.size() < 5)
+        if (windowXAxisForGradient.size() < 5)
         {
             return 0.0;
         }
 
-        std::vector<double> polynom = polyfit(xAxisPolynom, polynomForces, 1, {0});
+        std::vector<double> gradient = polyfit(windowXAxisForGradient, windowForcesForGradient, 1, {0});
 
-        return static_cast<double>(polynom[1]);
+        return static_cast<double>(gradient[1]);
     }
     return 0.0;
 }
 
-double Foam::functionObjects::convergenceDetection::calculatePolynomGrad()
+double Foam::functionObjects::convergenceDetection::calculateGradient()
 {
-    int normalizationForcesWindow = static_cast<int>(currentIteration_ * windowNormalization_);
-    int windowForcesPolynom = static_cast<int>(currentIteration_ * windowPolynom_);
+    int windowForcesNormalization = static_cast<int>(currentIteration_ * windowNormalization_);
+    int windowForcesGradient = static_cast<int>(currentIteration_ * windowGradient_);
 
     // for transient get last 50% of time - not of iterations
-    std::vector<double> normalizedForces(forcesData_.end() - normalizationForcesWindow, forcesData_.end());
+    std::vector<double> normalizedForces(forcesData_.end() - windowForcesNormalization, forcesData_.end());
 
     double forcesMean = meanValue(normalizedForces);
 
@@ -435,47 +434,44 @@ double Foam::functionObjects::convergenceDetection::calculatePolynomGrad()
 
     // Info << "Start: " << start << " End: " << end << " Step: " << step << endl;
 
-    std::vector<double> xAxisGeneral = arange(start, end, step);
+    std::vector<double> xAxisNormalized = arange(start, end, step);
 
-    std::vector<double> polynomForces(forcesNormalized_.end() - windowForcesPolynom, forcesNormalized_.end());
+    std::vector<double> windowForcesForGradient§(forcesNormalized_.end() - windowForcesGradient, forcesNormalized_.end());
 
-    std::vector<double> xAxisPolynom(xAxisGeneral.end() - windowForcesPolynom, xAxisGeneral.end());
+    std::vector<double> windowXAxisForGradient(xAxisNormalized.end() - windowForcesGradient, xAxisNormalized.end());
 
-    // Info << "xAxisPolynom: " << xAxisPolynom << endl;
-    // Info << "polynomForces: " << polynomForces << endl;
+    std::vector<double> gradient = polyfit(windowXAxisForGradient, windowForcesForGradient§, 1, {0});
 
-    std::vector<double> polynom = polyfit(xAxisPolynom, polynomForces, 1, {0});
-
-    return static_cast<double>(polynom[1]);
+    return static_cast<double>(gradient[1]);
 }
 
 // DRY
-double Foam::functionObjects::convergenceDetection::checkCriteriaForConvergence()
+double Foam::functionObjects::convergenceDetection::convergenceMaxGradient()
 {
-    int evaluationWindow = static_cast<int>(windowEvaluation_ * polyVector_.size());
-    std::vector<double> vectorForEvaluation(polyVector_.end() - evaluationWindow, polyVector_.end());
+    int evaluationWindow = static_cast<int>(windowEvaluation_ * gradArray_.size());
+    std::vector<double> arrayForEvaluation(gradArray_.end() - evaluationWindow, gradArray_.end());
 
-    if (vectorForEvaluation.size() > 0)
+    if (arrayForEvaluation.size() > 0)
     {
-        double maxValue = *std::max_element(vectorForEvaluation.begin(), vectorForEvaluation.end());
-        double minValue = *std::min_element(vectorForEvaluation.begin(), vectorForEvaluation.end());
+        double maxValue = *std::max_element(arrayForEvaluation.begin(), arrayForEvaluation.end());
+        double minValue = *std::min_element(arrayForEvaluation.begin(), arrayForEvaluation.end());
         return max(maxValue, fabs(minValue));
     }
     return 1.0;
 }
 
 // DRY
-double Foam::functionObjects::convergenceDetection::checkCriteriaForAveraging()
+double Foam::functionObjects::convergenceDetection::averagingMaxGradient()
 {
     int evaluationWindow = static_cast<int>(
-        windowEvaluationAveraging_ * polyVectorAveraging_.size());
+        windowEvaluationAveraging_ * gradArrayAveraging_.size());
 
-    std::vector<double> vectorForEvaluation(polyVectorAveraging_.end() - evaluationWindow, polyVectorAveraging_.end());
+    std::vector<double> arrayForEvaluation(gradArrayAveraging_.end() - evaluationWindow, gradArrayAveraging_.end());
 
-    if (vectorForEvaluation.size() > 0)
+    if (arrayForEvaluation.size() > 0)
     {
-        double maxValue = *std::max_element(vectorForEvaluation.begin(), vectorForEvaluation.end());
-        double minValue = *std::min_element(vectorForEvaluation.begin(), vectorForEvaluation.end());
+        double maxValue = *std::max_element(arrayForEvaluation.begin(), arrayForEvaluation.end());
+        double minValue = *std::min_element(arrayForEvaluation.begin(), arrayForEvaluation.end());
         return max(maxValue, fabs(minValue));
     }
     return 1.0;
