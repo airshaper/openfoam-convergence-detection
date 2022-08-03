@@ -263,8 +263,9 @@ bool Foam::functionObjects::convergenceDetection::isAveraged()
 void Foam::functionObjects::convergenceDetection::isFinished()
 {
 
-    if (isAveraged() ||
-        reachedMaxIterations() && minIterationsForAveraging())
+    if ((isAveraged() ||
+         reachedMaxIterations()) &&
+        minIterationsForAveraging())
     {
         Info << "###########" << endl;
         Info << "Simulation should stop!!!!" << endl;
