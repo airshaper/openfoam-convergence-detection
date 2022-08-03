@@ -46,6 +46,6 @@ In case forces explode this factor is used to check if forces are 2 times higher
 
 ## Credits
 
-Original Python implementation by Joaõ Miranda
+Original Python implementation by João Miranda
 
 OpenFoam C++ Implementation by Nikola Majksner
