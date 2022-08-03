@@ -264,20 +264,17 @@ void Foam::functionObjects::convergenceDetection::isFinished()
 {
 
     if (isAveraged() ||
-        reachedMaxIterations())
+        reachedMaxIterations() && minIterationsForAveraging())
     {
-        if (minIterationsForAveraging())
-        {
-            Info << "###########" << endl;
-            Info << "Simulation should stop!!!!" << endl;
-            Info << "Gradient: " << averagingMaxGradient() << endl;
-            Info << "Condition for averaging: " << thresholdAveraging_ << endl;
-            Info << "###########" << endl;
+        Info << "###########" << endl;
+        Info << "Simulation should stop!!!!" << endl;
+        Info << "Gradient: " << averagingMaxGradient() << endl;
+        Info << "Condition for averaging: " << thresholdAveraging_ << endl;
+        Info << "###########" << endl;
 
-            time().stopAt(Time::saWriteNow);
-            toggleAveraging(false);
-            simulationFinished_ = true;
-        }
+        time().stopAt(Time::saWriteNow);
+        toggleAveraging(false);
+        simulationFinished_ = true;
     }
 }
 
@@ -431,8 +428,6 @@ double Foam::functionObjects::convergenceDetection::calculateGradient()
     double start = 1.0f / currentIteration_;
     double end = 1.0f + 1.0f / currentIteration_;
     double step = 1.0f / currentIteration_;
-
-    // Info << "Start: " << start << " End: " << end << " Step: " << step << endl;
 
     std::vector<double> xAxisNormalized = arange(start, end, step);
 
