@@ -106,20 +106,15 @@ bool Foam::functionObjects::convergenceDetection::read(const dictionary &dict)
     dict.readIfPresent("iterationMinConvergence", iterationMinConvergence_);
     dict.readIfPresent("iterationMinAveraging", iterationMinAveraging_);
 
-    /*
-    if (!exists(time().caseSystem() + "/averaging"))
+    if (!exists(time().globalPath() + "/system/averaging"))
     {
-        if (Pstream::master())
-        {
-            FatalError
-                << "Averaging file does not exists, please create averaging file in system/averaging and include it in controlDict (#include \"averaging\")" << nl
-                << "https://www.openfoam.com/documentation/guides/latest/doc/guide-fos-field-fieldAverage.html" << nl
-                << abort(FatalError);
+        FatalError
+            << "Averaging file does not exists, please create averaging file in system/averaging and include it in controlDict (#include \"averaging\")" << nl
+            << "https://www.openfoam.com/documentation/guides/latest/doc/guide-fos-field-fieldAverage.html" << nl
+            << abort(FatalError);
 
-            return false;
-        }
+        return false;
     }
-    */
 
     return true;
 }
