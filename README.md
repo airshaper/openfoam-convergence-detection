@@ -1,0 +1,1 @@
+# Openfoam.com convergence detection
