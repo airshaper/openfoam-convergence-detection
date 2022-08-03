@@ -5,7 +5,7 @@
     \\  /    A nd           | www.openfoam.com
      \\/     M anipulation  |
 -------------------------------------------------------------------------------
-    Copyright (C) YEAR AUTHOR,AFFILIATION
+    Copyright (C) 2022 Nikola Majksner, Wouter Remmerie, AirShaper
 -------------------------------------------------------------------------------
 License
     This file is part of OpenFOAM.
