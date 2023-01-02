@@ -151,7 +151,8 @@ bool Foam::functionObjects::convergenceDetection::execute()
             !simulationFinished_ &&
             convergenceFound_)
         {
-            if (convergenceMaxGradient() >= thresholdConvergence_ && !forcedConvergence_)
+            if ((convergenceMaxGradient() >= thresholdConvergence_ && !forcedConvergence_) &&
+                (currentIteration_ < iterationMaxConvergence_))
             {
                 stopAveraging();
             }
