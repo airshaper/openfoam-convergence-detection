@@ -27,10 +27,12 @@ License
 
 #include "convergenceDetection.H"
 #include "Time.H"
-#include "fvMesh.H"
 #include "addToRunTimeSelectionTable.H"
 #include <vector>
 #include <algorithm>
+#include <map>
+
+using namespace Foam::functionObjects::fieldValues;
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
@@ -59,7 +61,7 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
       thresholdAveraging_(0.025),
       iterationMaxConvergence_(4000),
       iterationMaxAveraging_(2000),
-      forceStabilityFactor_(2),
+      convergenceStabilityFactor_(2),
       iterationMinConvergence_(200),
       iterationMinAveraging_(200),
       convergenceFound_(false),
@@ -71,26 +73,42 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
       rho_("rhoInf"),
       rhoInf_(1.225),
       CofR_(Zero),
-      normalizedForcesMeanConverged_(0),
-      forcesData_(0),
-      gradArray_(0),
-      gradArrayAveraging_(),
-      forcesNormalized_(),
-      forcesNormalizedAveraging_(),
+      normalizedDataMeanConverged_(),
+      porousObjectsNames_(),
+      porousNames_(),
+      porousObjects_(),
+      convergenceData_(),
+      gradData_(),
+      gradDataAveraging_(),
+      convergenceNormalized_(),
+      dataNormalized_(),
+      convergenceNormalizedAveraging_(),
       totalForceFilePtr_(nullptr),
       gradientFilePtr_(nullptr),
       gradientAveragedFilePtr_(nullptr)
 
 {
     read(dict);
+
     setCoordinateSystem(dict);
+
+    if (dict.found("porous"))
+    {
+        porousObjectsNames_ = dict.subDict("porous").toc();
+        for (const word &name : porousObjectsNames_)
+        {
+            porousObjects_.push_back(new surfaceFieldValue(name, runTime, dict.subDict("porous").subDict(name)));
+            const dictionary &porousSubDict = dict.subDict("porous").subDict(name);
+            word porousName = porousSubDict.lookupOrDefault<word>("name", name);
+            porousNames_.push_back(porousName);
+        }
+    }
 }
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
 bool Foam::functionObjects::convergenceDetection::read(const dictionary &dict)
 {
-
     forces::read(dict);
 
     dict.readIfPresent("windowNormalization", windowNormalization_);
@@ -102,7 +120,7 @@ bool Foam::functionObjects::convergenceDetection::read(const dictionary &dict)
     dict.readIfPresent("thresholdAveraging", thresholdAveraging_);
     dict.readIfPresent("iterationMaxConvergence", iterationMaxConvergence_);
     dict.readIfPresent("iterationMaxAveraging", iterationMaxAveraging_);
-    dict.readIfPresent("forceStabilityFactor", forceStabilityFactor_);
+    dict.readIfPresent("convergenceStabilityFactor_", convergenceStabilityFactor_);
     dict.readIfPresent("iterationMinConvergence", iterationMinConvergence_);
     dict.readIfPresent("iterationMinAveraging", iterationMinAveraging_);
 
@@ -121,22 +139,37 @@ bool Foam::functionObjects::convergenceDetection::read(const dictionary &dict)
 
 bool Foam::functionObjects::convergenceDetection::execute()
 {
-
     forces::execute();
+    unsigned i = 0;
+
+    if (!porousObjects_.empty())
+    {
+        for (surfaceFieldValue *sfv : porousObjects_)
+        {
+            sfv->write();
+            scalar area = sfv->getResult<scalar>("areaNormalIntegrate(" + porousNames_[i] + ",U)");
+
+            convergenceData_[porousNames_[i]].push_back(area);
+            i++;
+        }
+    }
 
     const vector sumForce = forces::forceEff();
 
     const double totalForce = sqrt(pow(sumForce[0], 2) + pow(sumForce[1], 2) + pow(sumForce[2], 2));
 
-    forcesData_.push_back(totalForce);
+    convergenceData_["forces"].push_back(totalForce);
 
     currentIteration_ = time().value();
 
     // wait for a few iterations before starting gradient calculation
     if (currentIteration_ >= 5)
     {
-        double caclculatedGradient = calculateGradient();
-        gradArray_.push_back(caclculatedGradient);
+        std::map<std::string, double> caclculatedGradient = calculateGradient();
+        for (const auto &cd : caclculatedGradient)
+        {
+            gradData_[cd.first].push_back(cd.second);
+        }
     }
 
     // need few iterations before starting calculation
@@ -151,13 +184,21 @@ bool Foam::functionObjects::convergenceDetection::execute()
             !simulationFinished_ &&
             convergenceFound_)
         {
-            if ((convergenceMaxGradient() >= thresholdConvergence_ && !forcedConvergence_) &&
+            std::map<std::string, double> cmg(convergenceMaxGradient());
+
+            bool shouldBeKickedOut = std::any_of(cmg.begin(), cmg.end(), [this](const auto &cmg)
+                                                 { return cmg.second >= thresholdConvergence_; });
+
+            if ((shouldBeKickedOut && !forcedConvergence_) &&
                 (currentIteration_ < iterationMaxConvergence_))
             {
                 stopAveraging();
             }
-            double caclculatedGradientAveraging = calculateGradientAveraging();
-            gradArrayAveraging_.push_back(caclculatedGradientAveraging);
+            std::map<std::string, double> caclculatedGradientAveraging = calculateGradientAveraging();
+            for (const auto &c : caclculatedGradientAveraging)
+            {
+                gradDataAveraging_[c.first].push_back(c.second);
+            }
             isExploded();
             isFinished();
         }
@@ -177,14 +218,14 @@ bool Foam::functionObjects::convergenceDetection::write()
     {
 
         createDataFile();
-        writeDataFile(totalForceFilePtr_(), forcesData_.back());
+        writeDataFile(totalForceFilePtr_(), convergenceData_["forces"].back());
         if (currentIteration_ >= 5)
         {
-            writeDataFile(gradientFilePtr_(), gradArray_.back());
+            writeDataFile(gradientFilePtr_(), gradData_["forces"].back());
         }
         if (convergenceFound_)
         {
-            writeDataFile(gradientAveragedFilePtr_(), gradArrayAveraging_.back());
+            writeDataFile(gradientAveragedFilePtr_(), gradDataAveraging_["forces"].back());
         }
         forces::write();
     }
@@ -250,22 +291,32 @@ bool Foam::functionObjects::convergenceDetection::minIterationsForAveraging()
 
 bool Foam::functionObjects::convergenceDetection::isAveraged()
 {
-    return averagingMaxGradient() < thresholdAveraging_ &&
-           averagingMaxGradient() > 0.0 &&
+    std::map<std::string, double> amg = averagingMaxGradient();
+
+    bool allDataAveragedEnough = std::all_of(amg.begin(), amg.end(), [this](const auto &amg)
+                                             { return amg.second < thresholdAveraging_; });
+
+    bool averagingMaxGradientGtZero = std::all_of(amg.begin(), amg.end(), [](const auto &amg)
+                                                  { return amg.second > 0.0; });
+    return allDataAveragedEnough &&
+           averagingMaxGradientGtZero &&
            currentIteration_ > static_cast<int>(1.25 * averagingStartedAt_) &&
            !simulationFinished_;
 }
 
 void Foam::functionObjects::convergenceDetection::isFinished()
 {
-
     if ((isAveraged() ||
          reachedMaxIterations()) &&
         minIterationsForAveraging())
     {
+        std::map<std::string, double> amg = averagingMaxGradient();
         Info << "###########" << endl;
         Info << "Simulation should stop!!!!" << endl;
-        Info << "Gradient: " << averagingMaxGradient() << endl;
+        for (auto const &a : amg)
+        {
+            Info << "Gradient of " << a.first << ": " << a.second << endl;
+        }
         Info << "Condition for averaging: " << thresholdAveraging_ << endl;
         Info << "###########" << endl;
 
@@ -279,7 +330,7 @@ void Foam::functionObjects::convergenceDetection::stopAveraging()
 {
     convergenceFound_ = false;
     toggleAveraging(false);
-    gradArrayAveraging_.clear();
+    gradDataAveraging_.clear();
     if (exists(time().globalPath() + "/averaging"))
     {
         rm(time().globalPath() + "/averaging");
@@ -289,11 +340,14 @@ void Foam::functionObjects::convergenceDetection::stopAveraging()
 
 void Foam::functionObjects::convergenceDetection::isExploded()
 {
-    if (normalizedForcesMeanConverged_ > 0 && convergenceFound_)
+    bool anyNormalizedMeanDataGtZero = std::any_of(normalizedDataMeanConverged_.begin(), normalizedDataMeanConverged_.end(), [](const auto &ndmc)
+                                                   { return ndmc.second > 0; });
+
+    if (anyNormalizedMeanDataGtZero && convergenceFound_)
     {
-        double test1 = normalizedForcesMeanConverged_ / forceStabilityFactor_;
-        double test2 = normalizedForcesMeanConverged_ * forceStabilityFactor_;
-        double lastIterationForces = forcesData_.back();
+        double test1 = normalizedDataMeanConverged_["forces"] / convergenceStabilityFactor_;
+        double test2 = normalizedDataMeanConverged_["forces"] * convergenceStabilityFactor_;
+        double lastIterationForces = convergenceData_["forces"].back();
 
         if (lastIterationForces < test1 or lastIterationForces > test2)
         {
@@ -309,7 +363,12 @@ void Foam::functionObjects::convergenceDetection::isExploded()
 
 void Foam::functionObjects::convergenceDetection::convergenceEvaluation()
 {
-    if ((convergenceMaxGradient() < thresholdConvergence_ &&
+    std::map<std::string, double> cmg(convergenceMaxGradient());
+
+    bool allDataConverged = std::all_of(cmg.begin(), cmg.end(), [this](const auto &cmg)
+                                        { return cmg.second < thresholdConvergence_; });
+
+    if ((allDataConverged &&
          currentIteration_ >= iterationMinConvergence_ &&
          !convergenceFound_) ||
         (currentIteration_ >= iterationMaxConvergence_ &&
@@ -324,17 +383,28 @@ void Foam::functionObjects::convergenceDetection::convergenceEvaluation()
         Info << "#####################################" << endl;
         Info << forcedConvergence << "Convergence Found" << endl;
         Info << "#####################################" << endl;
-        Info << "Gradient: " << convergenceMaxGradient() << endl;
+        for (auto const &c : cmg)
+        {
+            Info << "Gradient of " << c.first << ": " << c.second << endl;
+        }
         Info << "Condition for convergence: " << thresholdConvergence_ << endl;
-        Info << "Condition is: " << (convergenceMaxGradient() < thresholdConvergence_) << endl;
+        for (auto const &c : cmg)
+        {
+            Info << "Condition for " << c.first << "is : " << (c.second < thresholdConvergence_) << endl;
+        }
 
         averagingStartedAt_ = currentIteration_;
 
-        int windowForcesNormalization = static_cast<int>(currentIteration_ * windowNormalization_);
+        int windowDataNormalization = static_cast<int>(currentIteration_ * windowNormalization_);
 
-        std::vector<double> normalizedForces(forcesData_.end() - windowForcesNormalization, forcesData_.end());
+        std::map<std::string, std::vector<double>> normalizedData;
 
-        normalizedForcesMeanConverged_ = meanValue(normalizedForces);
+        for (auto const &d : convergenceData_)
+        {
+            normalizedData[d.first].insert(normalizedData[d.first].end(), d.second.end() - windowDataNormalization, d.second.end());
+        }
+
+        normalizedDataMeanConverged_ = meanValue(normalizedData);
 
         OFstream os(time().globalPath() + "/averaging");
         os << averagingStartedAt_ << endl;
@@ -356,34 +426,45 @@ void Foam::functionObjects::convergenceDetection::toggleAveraging(bool toggle)
     averaging.regIOobject::write();
 }
 
-std::vector<double> Foam::functionObjects::convergenceDetection::divideForces(double d)
+std::map<std::string, std::vector<double>> Foam::functionObjects::convergenceDetection::divideData(std::map<std::string, double> dataMean)
 {
-    std::vector<double> dividedForces = {0};
-    for (auto itr : forcesData_)
-        dividedForces.push_back(itr / d);
+    std::map<std::string, std::vector<double>> dividedData;
 
-    return dividedForces;
+    for (const auto &cd : convergenceData_)
+    {
+        for (auto itr : cd.second)
+            dividedData[cd.first].push_back(itr / dataMean[cd.first]);
+    }
+
+    return dividedData;
 }
 
-double Foam::functionObjects::convergenceDetection::meanValue(std::vector<double> normalizedForces)
+std::map<std::string, double> Foam::functionObjects::convergenceDetection::meanValue(std::map<std::string, std::vector<double>> normalizedData)
 {
-    double sum = 0.0;
-    for (auto itr : normalizedForces)
-        sum += itr;
+    std::map<std::string, double> meanData;
 
-    return sum / normalizedForces.size(); // for transient change this
+    for (const auto &nd : normalizedData)
+    {
+        double sum = 0.0;
+        for (auto itr : nd.second)
+            sum += itr;
+        meanData[nd.first] = sum / nd.second.size();
+    }
+
+    return meanData; // for transient change this
 }
 
-double Foam::functionObjects::convergenceDetection::calculateGradientAveraging()
+std::map<std::string, double> Foam::functionObjects::convergenceDetection::calculateGradientAveraging()
 {
     int averagingSize = currentIteration_ - averagingStartedAt_;
+    std::map<std::string, double> gradient;
 
     // allow some data to come in
     if (averagingSize >= 5)
     {
         double maxIterationNormalized = static_cast<double>(currentIteration_) / static_cast<double>(averagingStartedAt_);
 
-        forcesNormalizedAveraging_ = divideForces(normalizedForcesMeanConverged_);
+        convergenceNormalizedAveraging_ = divideData(normalizedDataMeanConverged_);
 
         double start = 1 + (maxIterationNormalized / averagingSize);
         double end = maxIterationNormalized + maxIterationNormalized / averagingSize;
@@ -391,35 +472,55 @@ double Foam::functionObjects::convergenceDetection::calculateGradientAveraging()
 
         std::vector<double> xAxisNormalized = arange(start, end, step);
 
-        int windowForcesNormalization = static_cast<int>(xAxisNormalized.size() * windowGradientAveraging_);
+        std::map<std::string, std::vector<double>> windowDataForGradient;
 
-        std::vector<double> windowForcesForGradient(forcesNormalizedAveraging_.end() - windowForcesNormalization, forcesNormalizedAveraging_.end());
+        int windowDataNormalization = static_cast<int>(xAxisNormalized.size() * windowGradientAveraging_);
 
-        std::vector<double> windowXAxisForGradient(xAxisNormalized.end() - windowForcesNormalization, xAxisNormalized.end());
-
-        if (windowXAxisForGradient.size() < 5)
+        for (auto const &c : convergenceNormalizedAveraging_)
         {
-            return 0.0;
+            windowDataForGradient[c.first].insert(windowDataForGradient[c.first].end(), c.second.end() - windowDataNormalization, c.second.end());
         }
 
-        std::vector<double> gradient = polyfit(windowXAxisForGradient, windowForcesForGradient, 1, {0});
+        std::vector<double> windowXAxisForGradient(xAxisNormalized.end() - windowDataNormalization, xAxisNormalized.end());
 
-        return static_cast<double>(gradient[1]);
+        if (windowDataForGradient["forces"].size() < 5)
+        {
+            for (const auto &d : windowDataForGradient)
+            {
+                gradient[d.first] = 0.0;
+            }
+            return gradient;
+        }
+
+        for (const auto &d : windowDataForGradient)
+        {
+            gradient[d.first] = polyfit(windowXAxisForGradient, d.second, 1, {0});
+        }
+
+        return gradient;
     }
-    return 0.0;
+    for (const auto &n : normalizedDataMeanConverged_)
+    {
+        gradient[n.first] = 0.0;
+    }
+    return gradient;
 }
 
-double Foam::functionObjects::convergenceDetection::calculateGradient()
+std::map<std::string, double> Foam::functionObjects::convergenceDetection::calculateGradient()
 {
-    int windowForcesNormalization = static_cast<int>(currentIteration_ * windowNormalization_);
-    int windowForcesGradient = static_cast<int>(currentIteration_ * windowGradient_);
+    int windowDataNormalization = static_cast<int>(currentIteration_ * windowNormalization_);
+    int windowDataGradient = static_cast<int>(currentIteration_ * windowGradient_);
 
-    // for transient get last 50% of time - not of iterations
-    std::vector<double> normalizedForces(forcesData_.end() - windowForcesNormalization, forcesData_.end());
+    std::map<std::string, std::vector<double>> normalizedData;
 
-    double forcesMean = meanValue(normalizedForces);
+    for (auto const &d : convergenceData_)
+    {
+        normalizedData[d.first].insert(normalizedData[d.first].end(), d.second.end() - windowDataNormalization, d.second.end());
+    }
 
-    forcesNormalized_ = divideForces(forcesMean);
+    std::map<std::string, double> dataMean = meanValue(normalizedData);
+
+    dataNormalized_ = divideData(dataMean);
 
     // take this into account for transient
     double start = 1.0f / currentIteration_;
@@ -428,45 +529,91 @@ double Foam::functionObjects::convergenceDetection::calculateGradient()
 
     std::vector<double> xAxisNormalized = arange(start, end, step);
 
-    std::vector<double> windowForcesForGradient(forcesNormalized_.end() - windowForcesGradient, forcesNormalized_.end());
+    std::map<std::string, std::vector<double>> windowDataForGradient;
 
-    std::vector<double> windowXAxisForGradient(xAxisNormalized.end() - windowForcesGradient, xAxisNormalized.end());
-
-    std::vector<double> gradient = polyfit(windowXAxisForGradient, windowForcesForGradient, 1, {0});
-
-    return static_cast<double>(gradient[1]);
-}
-
-// DRY
-double Foam::functionObjects::convergenceDetection::convergenceMaxGradient()
-{
-    int evaluationWindow = static_cast<int>(windowEvaluation_ * gradArray_.size());
-    std::vector<double> arrayForEvaluation(gradArray_.end() - evaluationWindow, gradArray_.end());
-
-    if (arrayForEvaluation.size() > 0)
+    for (auto const &d : dataNormalized_)
     {
-        double maxValue = *std::max_element(arrayForEvaluation.begin(), arrayForEvaluation.end());
-        double minValue = *std::min_element(arrayForEvaluation.begin(), arrayForEvaluation.end());
-        return max(maxValue, fabs(minValue));
+        windowDataForGradient[d.first].insert(windowDataForGradient[d.first].end(), d.second.end() - windowDataGradient, d.second.end());
     }
-    return 1.0;
+
+    std::vector<double> windowXAxisForGradient(xAxisNormalized.end() - windowDataGradient, xAxisNormalized.end());
+
+    std::map<std::string, double> gradient;
+
+    for (const auto &data : windowDataForGradient)
+    {
+        gradient[data.first] = polyfit(windowXAxisForGradient, data.second, 1, {0});
+    }
+
+    return gradient;
 }
 
 // DRY
-double Foam::functionObjects::convergenceDetection::averagingMaxGradient()
+std::map<std::string, double> Foam::functionObjects::convergenceDetection::convergenceMaxGradient()
+{
+    int evaluationWindow = static_cast<int>(windowEvaluation_ * gradData_["forces"].size());
+    std::map<std::string, std::vector<double>> dataForEvaluation;
+    std::map<std::string, double> maxGradient;
+    std::map<std::string, double> defaultGradient;
+
+    for (const auto &gd : gradData_)
+    {
+        dataForEvaluation[gd.first].insert(dataForEvaluation[gd.first].end(), gd.second.end() - evaluationWindow, gd.second.end());
+    }
+
+    if (dataForEvaluation["forces"].size() > 0)
+    {
+        for (const auto &afe : dataForEvaluation)
+        {
+            double maxValue = *std::max_element(afe.second.begin(), afe.second.end());
+            double minValue = *std::min_element(afe.second.begin(), afe.second.end());
+
+            maxGradient[afe.first] = max(maxValue, fabs(minValue));
+        }
+
+        return maxGradient;
+    }
+    for (const auto &gd : gradData_)
+    {
+        defaultGradient[gd.first] = 1.0;
+    }
+
+    return defaultGradient;
+}
+
+// DRY
+std::map<std::string, double> Foam::functionObjects::convergenceDetection::averagingMaxGradient()
 {
     int evaluationWindow = static_cast<int>(
-        windowEvaluationAveraging_ * gradArrayAveraging_.size());
+        windowEvaluationAveraging_ * gradDataAveraging_["forces"].size());
 
-    std::vector<double> arrayForEvaluation(gradArrayAveraging_.end() - evaluationWindow, gradArrayAveraging_.end());
+    std::map<std::string, std::vector<double>> dataForEvaluation;
+    std::map<std::string, double> maxGradient;
+    std::map<std::string, double> defaultGradient;
 
-    if (arrayForEvaluation.size() > 0)
+    for (const auto &gd : gradDataAveraging_)
     {
-        double maxValue = *std::max_element(arrayForEvaluation.begin(), arrayForEvaluation.end());
-        double minValue = *std::min_element(arrayForEvaluation.begin(), arrayForEvaluation.end());
-        return max(maxValue, fabs(minValue));
+        dataForEvaluation[gd.first].insert(dataForEvaluation[gd.first].end(), gd.second.end() - evaluationWindow, gd.second.end());
     }
-    return 1.0;
+
+    if (dataForEvaluation["forces"].size() > 0)
+    {
+        for (const auto &afe : dataForEvaluation)
+        {
+            double maxValue = *std::max_element(afe.second.begin(), afe.second.end());
+            double minValue = *std::min_element(afe.second.begin(), afe.second.end());
+
+            maxGradient[afe.first] = max(maxValue, fabs(minValue));
+        }
+
+        return maxGradient;
+    }
+    for (const auto &gd : gradDataAveraging_)
+    {
+        defaultGradient[gd.first] = 1.0;
+    }
+
+    return defaultGradient;
 }
 
 std::vector<double> Foam::functionObjects::convergenceDetection::arange(double start, double stop, double step)
@@ -477,7 +624,7 @@ std::vector<double> Foam::functionObjects::convergenceDetection::arange(double s
     return values;
 }
 // https://gist.github.com/chrisengelsma/108f7ab0a746323beaaf7d6634cf4add
-std::vector<double> Foam::functionObjects::convergenceDetection::polyfit(
+double Foam::functionObjects::convergenceDetection::polyfit(
     const std::vector<double> x,
     const std::vector<double> y,
     const int order,
@@ -579,7 +726,7 @@ std::vector<double> Foam::functionObjects::convergenceDetection::polyfit(
     for (size_t i = 0; i < a.size(); ++i)
         coeffs[i] = a[i];
 
-    return coeffs;
+    return static_cast<double>(coeffs[1]);
 }
 
 // ************************************************************************* //

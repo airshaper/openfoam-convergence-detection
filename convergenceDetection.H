@@ -148,6 +148,9 @@ SourceFiles
 #define convergenceDetection_H
 
 #include "forces.H"
+#include "surfaceFieldValue.H"
+
+using namespace Foam::functionObjects::fieldValues;
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -164,6 +167,10 @@ namespace Foam
             : public forces
         {
 
+        protected:
+            // virtual double meanValue(std::vector<double>& forces_);
+            // virtual double calculate_Gradient_grad(std::vector<double> forces_);
+
             scalar windowNormalization_;
             scalar windowGradient_;
             scalar windowGradientAveraging_;
@@ -174,7 +181,7 @@ namespace Foam
             scalar thresholdAveraging_;
             scalar iterationMaxConvergence_;
             scalar iterationMaxAveraging_;
-            scalar forceStabilityFactor_;
+            scalar convergenceStabilityFactor_;
             scalar iterationMinConvergence_;
             scalar iterationMinAveraging_;
             bool convergenceFound_;
@@ -186,15 +193,43 @@ namespace Foam
             word rho_;
             scalar rhoInf_;
             vector CofR_;
-            scalar normalizedForcesMeanConverged_;
-            std::vector<double> forcesData_;
-            std::vector<double> gradArray_;
-            std::vector<double> gradArrayAveraging_;
-            std::vector<double> forcesNormalized_;
-            std::vector<double> forcesNormalizedAveraging_;
+            std::map<std::string, double> normalizedDataMeanConverged_;
+            wordList porousObjectsNames_;
+            std::vector<word> porousNames_;
+            std::vector<surfaceFieldValue *> porousObjects_;
+            std::map<std::string, std::vector<double>> convergenceData_;
+            std::map<std::string, std::vector<double>> gradData_;
+            std::map<std::string, std::vector<double>> gradDataAveraging_;
+            std::map<std::string, std::vector<double>> convergenceNormalized_;
+            std::map<std::string, std::vector<double>> dataNormalized_;
+            std::map<std::string, std::vector<double>> convergenceNormalizedAveraging_;
             autoPtr<OFstream> totalForceFilePtr_;
             autoPtr<OFstream> gradientFilePtr_;
             autoPtr<OFstream> gradientAveragedFilePtr_;
+
+            virtual std::map<std::string, std::vector<double>> divideData(std::map<std::string, double> dataMean);
+            virtual std::map<std::string, double> meanValue(std::map<std::string, std::vector<double>> normalizedData);
+            virtual std::map<std::string, double> calculateGradient();
+            virtual std::map<std::string, double> calculateGradientAveraging();
+            virtual std::map<std::string, double> convergenceMaxGradient();
+            virtual std::map<std::string, double> averagingMaxGradient();
+            virtual void stopAveraging();
+            virtual void isFinished();
+            virtual void convergenceEvaluation();
+            virtual void isExploded();
+            virtual void createDataFile();
+            virtual bool reachedMaxIterations();
+            virtual bool minIterationsForAveraging();
+            virtual bool isAveraged();
+            virtual void writeDataFileHeader(const word &header, const word &tabbedName, OFstream &os) const;
+            virtual void writeDataFile(OFstream &os, double &value) const;
+            virtual double polyfit(const std::vector<double> x,
+                                   const std::vector<double> y,
+                                   const int order,
+                                   std::vector<double> coeffs);
+            virtual std::vector<double> arange(double start, double stop, double step);
+
+            virtual void toggleAveraging(bool toggle);
 
         public:
             //- Runtime type information
@@ -229,36 +264,7 @@ namespace Foam
             virtual bool end();
 
             //- Write the convergenceDetection
-            virtual bool
-            write();
-
-        protected:
-            // virtual double meanValue(std::vector<double>& forces_);
-            // virtual double calculate_Gradient_grad(std::vector<double> forces_);
-
-            virtual std::vector<double> divideForces(double d);
-            virtual double meanValue(std::vector<double> normalizedForces);
-            virtual double calculateGradient();
-            virtual double calculateGradientAveraging();
-            virtual double convergenceMaxGradient();
-            virtual double averagingMaxGradient();
-            virtual void stopAveraging();
-            virtual void isFinished();
-            virtual void convergenceEvaluation();
-            virtual void isExploded();
-            virtual void createDataFile();
-            virtual bool reachedMaxIterations();
-            virtual bool minIterationsForAveraging();
-            virtual bool isAveraged();
-            virtual void writeDataFileHeader(const word &header, const word &tabbedName, OFstream &os) const;
-            virtual void writeDataFile(OFstream &os, double &value) const;
-            virtual std::vector<double> polyfit(const std::vector<double> x,
-                                                const std::vector<double> y,
-                                                const int order,
-                                                std::vector<double> coeffs);
-            virtual std::vector<double> arange(double start, double stop, double step);
-
-            virtual void toggleAveraging(bool toggle);
+            virtual bool write();
         };
 
         // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //

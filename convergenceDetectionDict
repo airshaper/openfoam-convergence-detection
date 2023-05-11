@@ -15,7 +15,7 @@ convergenceDetection1
     // iterationMaxAveraging 2000;
     // iterationMinConvergence 200;
     // iterationMinAveraging 200;
-    // forceStabilityFactor 2;
+    // convergenceStabilityFactor 2;
     
     // forces - required
     // modify according to your case
