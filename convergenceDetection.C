@@ -238,19 +238,19 @@ void Foam::functionObjects::convergenceDetection::createDataFile()
 {
     if (!totalForceFilePtr_.valid())
     {
-        totalForceFilePtr_ = createFile("totalForce");
+        totalForceFilePtr_ = newFileAtStartTime("totalForce");
         writeDataFileHeader("totalForce", "total (x,y,z)", totalForceFilePtr_());
     }
 
     if (!gradientFilePtr_.valid())
     {
-        gradientFilePtr_ = createFile("gradient");
+        gradientFilePtr_ = newFileAtStartTime("gradient");
         writeDataFileHeader("Gradient", "Gradient", gradientFilePtr_());
     }
 
     if (!gradientAveragedFilePtr_.valid())
     {
-        gradientAveragedFilePtr_ = createFile("gradientAveraged");
+        gradientAveragedFilePtr_ = newFileAtStartTime("gradientAveraged");
         writeDataFileHeader("GradientAveraged", "GradientAveraged", gradientAveragedFilePtr_());
     }
 }
