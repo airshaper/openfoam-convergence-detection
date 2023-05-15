@@ -16,6 +16,31 @@ convergenceDetection1
     // iterationMinConvergence 200;
     // iterationMinAveraging 200;
     // convergenceStabilityFactor 2;
+
+    rotation_forces {
+        forces_rotation_local_CS_o-1_m-1
+        {
+
+            type forces;
+            libs ("libforces.so"); //Lib to load
+            patches (rotating_o-1_m-1); // change to your patch name
+            writeControl    outputTime;
+            writeToFile     false;
+            pName       p;
+            UName       U;
+            rho     rhoInf;     // Indicates incompressible
+            log         yes;
+            rhoInf 1.225; //Reference density for fluid
+            origin (5.7195773108383204e-05 0.00048790520819794116 -7.06637150485188e-09);
+            rotation
+            {
+                type axes;
+                e1 (0.018186134589979835 0.0012717031291784764 -1.3326080284815782e-09);
+                e2 (1.2717044617865047e-13 -1.334426641940576e-09 -0.001271703127359863);
+                e3 (-1.6172288464513707e-06 2.3127364232664738e-05 -2.4268224233840492e-11);
+            }
+        }
+    }
     
     // forces - required
     // modify according to your case

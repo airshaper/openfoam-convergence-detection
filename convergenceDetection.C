@@ -28,6 +28,7 @@ License
 #include "convergenceDetection.H"
 #include "Time.H"
 #include "addToRunTimeSelectionTable.H"
+#include "cartesianCS.H"
 #include <vector>
 #include <algorithm>
 #include <map>
@@ -75,8 +76,12 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
       CofR_(Zero),
       normalizedDataMeanConverged_(),
       porousObjectsNames_(),
+      rotatingObjectsNames_(),
       porousNames_(),
+      rotatingNames_(),
       porousObjects_(),
+      rotatingObjects_(),
+      coordSysPtrC_(nullptr),
       convergenceData_(),
       gradData_(),
       gradDataAveraging_(),
@@ -101,6 +106,20 @@ Foam::functionObjects::convergenceDetection::convergenceDetection(
             const dictionary &porousSubDict = dict.subDict("porous").subDict(name);
             word porousName = porousSubDict.lookupOrDefault<word>("name", name);
             porousNames_.push_back(porousName);
+        }
+    }
+
+    if (dict.found("rotation_forces"))
+    {
+        rotatingObjectsNames_ = dict.subDict("rotation_forces").toc();
+        for (const word &name : rotatingObjectsNames_)
+        {
+            rotatingObjects_.push_back(new forces(name, runTime, dict.subDict("rotation_forces").subDict(name)));
+            coordSysPtrC_.clear();
+            coordSysPtrC_.reset(new coordSystem::cartesian(dict.subDict("rotation_forces").subDict(name)));
+            const dictionary &rotatingSubDict = dict.subDict("rotation_forces").subDict(name);
+            word rotatingName = rotatingSubDict.lookupOrDefault<word>("name", name);
+            rotatingNames_.push_back(rotatingName);
         }
     }
 }
@@ -140,17 +159,32 @@ bool Foam::functionObjects::convergenceDetection::read(const dictionary &dict)
 bool Foam::functionObjects::convergenceDetection::execute()
 {
     forces::execute();
-    unsigned i = 0;
 
     if (!porousObjects_.empty())
     {
+        unsigned porousCount = 0;
         for (surfaceFieldValue *sfv : porousObjects_)
         {
             sfv->write();
-            scalar area = sfv->getResult<scalar>("areaNormalIntegrate(" + porousNames_[i] + ",U)");
+            scalar area = sfv->getResult<scalar>("areaNormalIntegrate(" + porousNames_[porousCount] + ",U)");
 
-            convergenceData_[porousNames_[i]].push_back(area);
-            i++;
+            convergenceData_[porousNames_[porousCount]].push_back(area);
+            porousCount++;
+        }
+    }
+
+    if (!rotatingObjects_.empty())
+    {
+        unsigned roCount = 0;
+        for (forces *f : rotatingObjects_)
+        {
+            f->calcForcesMoments();
+            const vector forces = f->forceEff();
+
+            const double thrust = coordSysPtrC_->localVector(forces)[0];
+
+            convergenceData_[rotatingNames_[roCount]].push_back(thrust);
+            roCount++;
         }
     }
 
@@ -165,6 +199,7 @@ bool Foam::functionObjects::convergenceDetection::execute()
     // wait for a few iterations before starting gradient calculation
     if (currentIteration_ >= 5)
     {
+
         std::map<std::string, double> caclculatedGradient = calculateGradient();
         for (const auto &cd : caclculatedGradient)
         {

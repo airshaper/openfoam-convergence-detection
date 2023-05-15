@@ -149,8 +149,10 @@ SourceFiles
 
 #include "forces.H"
 #include "surfaceFieldValue.H"
+#include "coordinateSystem.H"
 
 using namespace Foam::functionObjects::fieldValues;
+using namespace Foam::functionObjects;
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -195,9 +197,14 @@ namespace Foam
             vector CofR_;
             std::map<std::string, double> normalizedDataMeanConverged_;
             wordList porousObjectsNames_;
+            wordList rotatingObjectsNames_;
             std::vector<word> porousNames_;
+            std::vector<word> rotatingNames_;
             std::vector<surfaceFieldValue *> porousObjects_;
-            std::map<std::string, std::vector<double>> convergenceData_;
+            std::vector<functionObjects::forces *> rotatingObjects_;
+            autoPtr<coordinateSystem> coordSysPtrC_;
+            std::map<std::string, std::vector<double>>
+                convergenceData_;
             std::map<std::string, std::vector<double>> gradData_;
             std::map<std::string, std::vector<double>> gradDataAveraging_;
             std::map<std::string, std::vector<double>> convergenceNormalized_;
